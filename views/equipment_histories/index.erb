@@ -24,6 +24,15 @@
     <input name="serial" value="<%= params['serial'] %>">
   </div>
   <div>
+    <label>Action</label>
+    <select name="action">
+      <option value="">Any</option>
+      <% ['assigned','returned','damaged','under_repair','status_change'].each do |a| %>
+        <option value="<%= a %>" <%= 'selected' if params['action'] == a %>><%= a.humanize %></option>
+      <% end %>
+    </select>
+  </div>
+  <div>
     <label>From</label>
     <input name="from" type="date" value="<%= params['from'] %>">
   </div>
@@ -37,7 +46,29 @@
   </div>
 </form>
 
-<table style="width:100%; margin-top:12px">
+<style>
+  .history-table { width:100%; border-collapse:collapse; table-layout:fixed; background:var(--card); border-radius:8px; overflow:hidden; margin-top:12px }
+  .history-table thead th { padding:10px 12px; text-align:left; background: rgba(10,30,40,0.6); color:var(--text); border-bottom:1px solid rgba(255,255,255,0.03) }
+  .history-table tbody td { padding:10px 12px; color:var(--muted); vertical-align:top }
+  .history-table tbody td.details { white-space:pre-wrap; overflow:auto; max-height:140px }
+  .history-table col.col-occur { width:12% }
+  .history-table col.col-eq { width:20% }
+  .history-table col.col-action { width:12% }
+  .history-table col.col-user { width:12% }
+  .history-table col.col-serial { width:12% }
+  .history-table col.col-details { width:32% }
+  @media (max-width:900px) { .history-table { font-size:0.92rem } }
+</style>
+
+<table class="history-table">
+  <colgroup>
+    <col class="col-occur">
+    <col class="col-eq">
+    <col class="col-action">
+    <col class="col-user">
+    <col class="col-serial">
+    <col class="col-details">
+  </colgroup>
   <thead>
     <tr>
       <th>Occurred</th>
@@ -66,9 +97,84 @@
           <td><%= h.action %></td>
           <td><%= h.user ? h.user.username : '-' %></td>
           <td><%= d['serial'] || '-' %></td>
-          <td style="max-width:600px; white-space:pre-wrap"><%= h.details %></td>
+          <td class="details" style="max-width:600px">
+            <%# Build a readable full text depending on action %>
+            <% full_text = begin
+                 if h.action == 'returned'
+                   ft = "Returned at: #{d['returned_at'] || (h.occurred_at || h.created_at)}\n"
+                   ft += "Notes: #{d['notes']}\n" if d['notes']
+                   ft
+                 elsif h.action == 'damaged'
+                   ft = "Damaged: #{d['status'] || 'damaged'}\n"
+                   ft += "Reason: #{d['diagnostic']}\n" if d['diagnostic']
+                   ft += "Reported by: #{d['changed_by']}\n" if d['changed_by']
+                   ft
+                 else
+                   h.details.to_s
+                 end
+               rescue
+                 h.details.to_s
+               end %>
+            <% preview = full_text.length > 180 ? (full_text[0,180] + '...') : full_text %>
+            <div class="details-preview"><%= preview %></div>
+            <div class="details-full" style="display:none"><%= full_text %></div>
+            <div class="details-actions" style="margin-top:6px">
+              <button class="btn-secondary btn-copy" type="button">Copy</button>
+              <button class="btn-primary btn-expand" type="button" style="margin-left:6px">Expand</button>
+            </div>
+          </td>
         </tr>
       <% end %>
     <% end %>
   </tbody>
 </table>
+
+<!-- Details modal (re-used) -->
+<div id="detailsModal" style="display:none;position:fixed;inset:0;z-index:2000;align-items:center;justify-content:center;">
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,0.6);"></div>
+  <div style="position:relative;max-width:900px;margin:6vh auto;background:var(--card);padding:16px;border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,0.6);">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <h3 style="margin:0;color:var(--accent)">Details</h3>
+      <div>
+        <button id="modalCopy" class="btn-secondary" type="button" style="margin-right:8px">Copy</button>
+        <button id="modalClose" class="btn-secondary" type="button">Close</button>
+      </div>
+    </div>
+    <pre class="modal-body" style="white-space:pre-wrap;max-height:60vh;overflow:auto;margin-top:12px;color:var(--text)"></pre>
+  </div>
+</div>
+
+<!-- Scripts: jQuery, DataTables, modal + copy handlers -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script>
+  $(function(){
+    try{ $('.history-table').DataTable({ pageLength: 25, order:[[0,'desc']], columnDefs:[{ orderable:false, targets: [5] }] }); }catch(e){console.warn('DataTables init failed', e)}
+
+    // expand opens modal
+    $(document).on('click', '.btn-expand', function(){
+      var cell = $(this).closest('td');
+      var txt = cell.find('.details-full').text();
+      $('#detailsModal .modal-body').text(txt);
+      $('#detailsModal').css('display','flex');
+      $('#modalCopy').data('text', txt);
+    });
+
+    // copy from cell
+    $(document).on('click', '.btn-copy', function(){
+      var cell = $(this).closest('td');
+      var txt = cell.find('.details-full').text();
+      navigator.clipboard && navigator.clipboard.writeText(txt).then(function(){
+        alert('Copied to clipboard');
+      }, function(){ alert('Copy failed - select and copy manually'); });
+    });
+
+    // modal controls
+    $('#modalClose').on('click', function(){ $('#detailsModal').hide(); });
+    $('#modalCopy').on('click', function(){ var t = $(this).data('text') || $('#detailsModal .modal-body').text(); navigator.clipboard && navigator.clipboard.writeText(t).then(function(){ alert('Copied to clipboard'); }, function(){ alert('Copy failed'); }); });
+
+    // click outside modal to close
+    $('#detailsModal').on('click', function(e){ if(e.target.id === 'detailsModal') $(this).hide(); });
+  });
+</script>

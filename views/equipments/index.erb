@@ -1,6 +1,17 @@
 <style>
   .inventory-wrap { display:grid; grid-template-columns: 280px 1fr; gap:20px; }
   .filter-card { background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent); padding:14px; border-radius:10px; border:1px solid rgba(255,255,255,0.03) }
+  /* Improve readability: stronger contrast and spacing */
+  table.dataTable { background: rgba(0,0,0,0.03); border-radius:8px; overflow:hidden }
+  table.dataTable tbody tr { border-bottom:1px solid rgba(255,255,255,0.02) }
+  table.dataTable tbody td { color: #e6f3ff }
+  .asset-link { color: #90e0ff; font-weight:700 }
+  .muted { color: #9fb6c6 }
+  .status-pill { font-size:0.85rem; padding:6px 10px }
+  .action-icon { width:34px; height:34px; margin-right:8px }
+  .action-delete { background: rgba(255,110,110,0.06); color:#ffb3b3 }
+  /* Hover improvements */
+  table.dataTable tbody tr:hover { background: rgba(255,255,255,0.01) }
   .filter-section { margin-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.02); padding-bottom:10px }
   .filter-section h4 { margin:0 0 8px 0; font-size:0.75rem; letter-spacing:1px; color:var(--muted); text-transform:uppercase }
   .primary-btn { background:var(--accent-2); color:#062017; padding:10px 16px; border-radius:8px; text-decoration:none; font-weight:600 }
@@ -13,7 +24,7 @@
   .status-available { background: rgba(139,222,146,0.08); color:#b7f3b0 }
   .status-maintenance { background: rgba(255,195,102,0.08); color:#ffd6a6 }
   .status-decommissioned { background: rgba(255,110,110,0.06); color:#ffb3b3 }
-  table.dataTable thead th { background: rgba(255,255,255,0.03); color:#cfeafc; border-bottom:2px solid rgba(255,255,255,0.04); }
+  table.dataTable thead th { background: rgba(255,255,255,0.03); color:var(--text); border-bottom:2px solid var(--border); }
   table.dataTable tbody td { padding:14px 10px }
   .asset-link { color: var(--accent); font-weight:700 }
   .muted { color:var(--muted) }
@@ -115,6 +126,14 @@
                 <a title="Edit" class="action-icon icon-edit" href="/equipments/<%= e.id %>/edit"> 
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 21v-3.75L17.81 2.44a2 2 0 012.83 0l0 0a2 2 0 010 2.83L5.86 20.08H3z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                 </a>
+                
+                <!-- Delete action: uses POST with method override to DELETE -->
+                <form action="/equipments/<%= e.id %>" method="post" style="display:inline" onsubmit="return confirm('Delete this asset? This cannot be undone.');">
+                  <input type="hidden" name="_method" value="delete">
+                  <button title="Delete" class="action-icon action-delete" type="submit" style="border:none;cursor:pointer">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 6h18" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M8 6v12a2 2 0 002 2h4a2 2 0 002-2V6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M10 11v6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M14 11v6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  </button>
+                </form>
               <% end %>
               
               <a title="Check Out" class="action-icon icon-checkout" href="/requests"> 

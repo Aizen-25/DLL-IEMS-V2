@@ -38,9 +38,24 @@
 <p><strong>Warranty Until:</strong> <%= @equipment.warranty_until %></p>
 <p><strong>Notes:</strong> <%= @equipment.notes %></p>
 
-<p>
-  <% if current_user && current_user.super_admin? %>
-    <a href="/equipments/<%= @equipment.id %>/edit">Edit</a> |
-  <% end %>
-  <a href="/equipments">Back to list</a>
-</p>
+<div style="display:flex;gap:12px;align-items:center;margin-top:12px">
+  <div style="color:var(--muted)">
+    <div style="font-size:0.85rem">History events</div>
+    <div style="font-weight:700;font-size:1.1rem"><%= @history_counts[:total] || 0 %></div>
+  </div>
+  <div style="color:var(--muted)">
+    <div style="font-size:0.85rem">Returned</div>
+    <div style="font-weight:700;color:var(--accent-green)"><%= @history_counts[:returned] || 0 %></div>
+  </div>
+  <div style="color:var(--muted)">
+    <div style="font-size:0.85rem">Damaged</div>
+    <div style="font-weight:700;color:var(--danger)"><%= @history_counts[:damaged] || 0 %></div>
+  </div>
+  <div style="margin-left:auto">
+    <% if current_user && current_user.super_admin? %>
+      <a href="/equipments/<%= @equipment.id %>/edit" class="btn-secondary">Edit</a>
+    <% end %>
+    <a href="/equipments/<%= @equipment.id %>/history" class="btn-primary" style="margin-left:8px">View History</a>
+    <a href="/equipments">Back to list</a>
+  </div>
+</div>

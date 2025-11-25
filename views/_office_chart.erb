@@ -1,16 +1,16 @@
 <div id="office_chart_card">
   <div style="margin-top:8px">
-    <div style="margin-bottom:8px; font-weight:600; color:#cfeafc">Office distribution</div>
-    <div style="padding:10px; background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005)); border:2px dashed rgba(106,209,255,0.12); border-radius:8px;">
+    <div style="margin-bottom:8px; font-weight:600; color:var(--text)">Office distribution</div>
+    <div style="padding:10px; background:var(--card); border:2px dashed var(--border); border-radius:8px;">
       <% max_count = (@location_rows.map{|r| r[:count]}.max || 1).to_f %>
       <% @location_rows.each do |row| %>
         <% pct = ((row[:count].to_f / (max_count > 0 ? max_count : 1)) * 100).round(2) %>
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
-          <div style="width:160px; color:#cfeafc"><%= row[:location] %></div>
-          <div style="flex:1; background:rgba(255,255,255,0.02); height:20px; border-radius:8px; overflow:hidden;">
+          <div style="width:160px; color:var(--text)"><%= row[:location] %></div>
+          <div style="flex:1; background:rgba(16,24,32,0.03); height:20px; border-radius:8px; overflow:hidden;">
             <div style="height:100%; width:<%= pct %>%; background:linear-gradient(90deg, rgba(54,162,235,0.95), rgba(20,80,150,0.9)); border-right:1px solid rgba(20,80,150,0.6);"></div>
           </div>
-          <div style="width:48px; text-align:right; color:#cfeafc"><%= row[:count] %></div>
+          <div style="width:48px; text-align:right; color:var(--muted)"><%= row[:count] %></div>
         </div>
       <% end %>
     </div>

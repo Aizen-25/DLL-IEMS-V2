@@ -1,19 +1,19 @@
 <div id="category_chart_card">
-  <div id="category_fallback" style="margin-top:8px; padding:10px; background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005)); border:2px dashed rgba(106,209,255,0.12); border-radius:8px;">
-    <div style="font-weight:600; color:#cfeafc; margin-bottom:6px">Category distribution</div>
+  <div id="category_fallback" style="margin-top:8px; padding:10px; background:var(--card); border:2px dashed var(--border); border-radius:8px;">
+    <div style="font-weight:600; color:var(--text); margin-bottom:6px">Category distribution</div>
     <% max_count = (@deployed_by_category.map{|c| c[:count]}.max || 1).to_f %>
     <% @deployed_by_category.each do |cat| %>
       <% pct = ((cat[:count].to_f / (max_count > 0 ? max_count : 1)) * 100).round(2) %>
       <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
-        <div style="width:160px; color:#cfeafc"><%= cat[:category] %></div>
-        <div style="flex:1; background:rgba(255,255,255,0.02); height:20px; border-radius:8px; overflow:hidden;">
+        <div style="width:160px; color:var(--text)"><%= cat[:category] %></div>
+        <div style="flex:1; background:rgba(16,24,32,0.03); height:20px; border-radius:8px; overflow:hidden;">
           <div style="height:100%; width:<%= pct %>%; background:linear-gradient(90deg, rgba(54,162,235,0.95), rgba(20,80,150,0.9)); border-right:1px solid rgba(20,80,150,0.6);"></div>
         </div>
-        <div style="width:48px; text-align:right; color:#cfeafc"><%= cat[:count] %></div>
+        <div style="width:48px; text-align:right; color:var(--muted)"><%= cat[:count] %></div>
       </div>
     <% end %>
   </div>
 
-  <canvas id="categoryDeployed" class="chart-canvas" style="margin-top:10px; border:1px solid rgba(255,255,255,0.03); background: rgba(0,0,0,0.02);"></canvas>
+  <canvas id="categoryDeployed" class="chart-canvas" style="margin-top:10px; border:1px solid var(--border); background: transparent;"></canvas>
 </div>
 </div>

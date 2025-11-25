@@ -2,25 +2,25 @@
   <h1 style="color:var(--accent); margin:0">Inventory Insights</h1>
   <form method="get" action="/dashboard" style="display:flex; gap:8px; align-items:center">
     <label for="year_filter" style="color:var(--muted); font-size:0.9rem">Filter by Year:</label>
-    <input type="number" id="year_filter" name="year" value="<%= params['year'] || Date.today.year %>" 
-           min="2000" max="<%= Date.today.year + 1 %>" 
-           style="padding:6px 10px; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:var(--text); width:90px">
+        <input type="number" id="year_filter" name="year" value="<%= params['year'] || Date.today.year %>" 
+          min="2000" max="<%= Date.today.year + 1 %>" 
+          style="padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--card); color:var(--text); width:90px">
     <button type="submit" style="padding:6px 14px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer">Apply</button>
     <% if params['year'] %>
-      <a href="/dashboard" style="padding:6px 10px; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:var(--muted); text-decoration:none; font-size:0.85rem">Clear</a>
+      <a href="/dashboard" style="padding:6px 10px; border-radius:6px; border:1px solid var(--border); background:var(--card); color:var(--muted); text-decoration:none; font-size:0.85rem">Clear</a>
     <% end %>
   </form>
 </div>
 
 <style>
   .dark-grid { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px }
-  .card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.03); padding:14px; border-radius:10px }
+  .card { background: var(--card); border:1px solid var(--border); padding:14px; border-radius:10px; color:var(--text) }
   .card.compact { padding:8px }
-  .title { color:#cfeafc; margin-bottom:8px }
-  .metric-big { font-size:1.6rem; color:var(--accent) }
+  .title { color:var(--text); margin-bottom:8px; font-weight:600 }
+  .metric-big { font-size:1.6rem; color:var(--text); font-weight:700 }
   .muted { color:var(--muted) }
   .turnover { display:flex; gap:12px; }
-  .turnover .tile { padding:10px; border-radius:8px; background: rgba(255,255,255,0.02); text-align:center }
+  .turnover .tile { padding:10px; border-radius:8px; background: rgba(16,24,32,0.02); text-align:center }
   @media (max-width:1000px) { .dark-grid { grid-template-columns: 1fr 1fr } }
   @media (max-width:700px) { .dark-grid { grid-template-columns: 1fr } .lead-grid { grid-template-columns: 1fr } }
   /* responsive chart canvas sizing */
@@ -145,7 +145,7 @@
         ctx.fillStyle = opts && opts.color ? opts.color : 'rgba(54,162,235,0.9)';
         ctx.fillRect(x, y, barWidth, barH);
         // label
-        ctx.fillStyle = '#cfeafc';
+        ctx.fillStyle = '#17262e';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'center';
         const tx = x + barWidth/2;

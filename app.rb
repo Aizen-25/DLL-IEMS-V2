@@ -246,6 +246,8 @@ get '/dashboard' do
     reqs = deployed_scope.where(equipment_id: e.id)
     deployed_names = []
     reqs.each do |rq|
+      # remember where this request's entries start so we can attach a per-request status suffix
+      start_index = deployed_names.length
       # try component_serials: {..} pattern
       if rq.notes && rq.notes.match(/component_serials:\s*(\{.*\})/m)
         begin
@@ -275,6 +277,26 @@ get '/dashboard' do
       else
         # fallback: create placeholders according to quantity
         (rq.quantity || 1).times { deployed_names << "#{e.name} (deployed)" }
+      end
+      # attach per-request status (if any) to the entries we just added for this request
+      added_count = deployed_names.length - start_index
+      if added_count > 0
+        begin
+          latest = EquipmentHistory.where(request_id: rq.id, action: 'status_change').order(occurred_at: :desc).first
+          if latest && latest.details
+            details = JSON.parse(latest.details) rescue nil
+            new_status = details.is_a?(Hash) ? (details['status'] || details['new_status']) : nil
+            if new_status && !new_status.to_s.strip.empty?
+              # append status to the entries added for this request
+              (0...added_count).each do |i|
+                idx = start_index + i
+                deployed_names[idx] = "#{deployed_names[idx]} (#{new_status})"
+              end
+            end
+          end
+        rescue => _e
+          # ignore history parsing failures
+        end
       end
     end
     # ensure count matches deployed_counts if possible
@@ -410,7 +432,13 @@ post '/requests/:id/status' do
     # also persist equipment-history for analytics if equipment present
     begin
       if rq.equipment
-        EquipmentHistory.create!(equipment: rq.equipment, user: nil, request: rq, action: 'status_change', details: { status: new_status, diagnostic: diagnostic }.to_json, occurred_at: Time.now)
+        # normalize action names for easier querying
+        action_name = case new_status.to_s.strip.downcase
+                      when 'damaged' then 'damaged'
+                      when 'under repair', 'maintenance' then 'under_repair'
+                      else 'status_change'
+                      end
+        EquipmentHistory.create!(equipment: rq.equipment, user: (current_user rescue nil), request: rq, action: action_name, details: { status: new_status, diagnostic: diagnostic, changed_by: (current_user&.username rescue nil) }.to_json, occurred_at: Time.now)
       end
     rescue => _e
     end
@@ -701,6 +729,98 @@ get '/reports/problem_brands' do
   @rows = @rows.sort_by { |r| [-r[:pct], -r[:problems], r[:category], r[:brand]] }
 
   erb :'reports/problem_brands'
+end
+
+# Top repaired / damaged items report
+get '/reports/top_repairs' do
+  require_super_admin!
+  top_n = (params['top_n'] || 10).to_i
+  from = params['from'] ? (Date.parse(params['from']) rescue nil) : nil
+  to = params['to'] ? (Date.parse(params['to']) rescue nil) : nil
+
+  q = EquipmentHistory.where(action: ['damaged','under_repair','status_change','returned','assigned'])
+  q = q.where('occurred_at >= ?', from.beginning_of_day) if from
+  q = q.where('occurred_at <= ?', to.end_of_day) if to
+
+  # Count damaged and repair events per equipment
+  counts = Hash.new { |h,k| h[k] = { damaged: 0, repairs: 0, returned: 0, total: 0 } }
+  q.find_each do |h|
+    next unless h.equipment_id
+    counts[h.equipment_id][:total] += 1
+    case h.action
+    when 'damaged'
+      counts[h.equipment_id][:damaged] += 1
+    when 'under_repair'
+      counts[h.equipment_id][:repairs] += 1
+    when 'returned'
+      counts[h.equipment_id][:returned] += 1
+    when 'status_change'
+      # treat status_change that mention repair/damaged as repairs
+      d = h.details_hash rescue {}
+      s = (d['status'] || '').to_s.downcase
+      if s.include?('repair') || s.include?('under repair')
+        counts[h.equipment_id][:repairs] += 1
+      elsif s.include?('damaged')
+        counts[h.equipment_id][:damaged] += 1
+      end
+    end
+  end
+
+  # Build rows with equipment info
+  rows = counts.map do |equipment_id, c|
+    eq = Equipment.find_by(id: equipment_id)
+    next unless eq
+    { equipment: eq, damaged: c[:damaged], repairs: c[:repairs], returned: c[:returned], total: c[:total] }
+  end.compact
+
+  # sort by (damaged+repairs) desc then total desc
+  @rows = rows.sort_by { |r| [-(r[:damaged] + r[:repairs]), -r[:total], r[:equipment].name] }.first(top_n)
+  @from = from
+  @to = to
+  @top_n = top_n
+
+  erb :'reports/top_repairs'
+end
+
+get '/reports/top_repairs.csv' do
+  require_super_admin!
+  content_type 'text/csv'
+  top_n = (params['top_n'] || 100).to_i
+  from = params['from'] ? (Date.parse(params['from']) rescue nil) : nil
+  to = params['to'] ? (Date.parse(params['to']) rescue nil) : nil
+
+  q = EquipmentHistory.where(action: ['damaged','under_repair','status_change','returned','assigned'])
+  q = q.where('occurred_at >= ?', from.beginning_of_day) if from
+  q = q.where('occurred_at <= ?', to.end_of_day) if to
+
+  counts = Hash.new { |h,k| h[k] = { damaged: 0, repairs: 0, returned: 0, total: 0 } }
+  q.find_each do |h|
+    next unless h.equipment_id
+    counts[h.equipment_id][:total] += 1
+    case h.action
+    when 'damaged' then counts[h.equipment_id][:damaged] += 1
+    when 'under_repair' then counts[h.equipment_id][:repairs] += 1
+    when 'returned' then counts[h.equipment_id][:returned] += 1
+    when 'status_change'
+      d = h.details_hash rescue {}
+      s = (d['status'] || '').to_s.downcase
+      counts[h.equipment_id][:repairs] += 1 if s.include?('repair')
+      counts[h.equipment_id][:damaged] += 1 if s.include?('damaged')
+    end
+  end
+
+  rows = counts.map do |equipment_id, c|
+    eq = Equipment.find_by(id: equipment_id)
+    next unless eq
+    [eq.id, eq.name, eq.serial_number, eq.brand, c[:damaged], c[:repairs], c[:returned], c[:total]]
+  end.compact
+  rows = rows.sort_by { |r| [-(r[4] + r[5]), -r[7]] }.first(top_n)
+
+  csv = CSV.generate do |csv_out|
+    csv_out << ['equipment_id','name','serial_number','brand','damaged_count','repair_count','returned_count','total_events']
+    rows.each { |r| csv_out << r }
+  end
+  csv
 end
 
 # JSON endpoint for charts: supports snapshot (current status) and history (activity-based)
@@ -1155,6 +1275,17 @@ end
 get '/equipments/:id' do
   Equipment.reset_column_information
   @equipment = Equipment.find(params[:id])
+  begin
+    hist = EquipmentHistory.where(equipment_id: @equipment.id)
+    @history_counts = {
+      total: hist.count,
+      returned: hist.where(action: 'returned').count,
+      damaged: hist.where(action: 'damaged').count,
+      repairs: hist.where(action: 'under_repair').count + hist.where("details LIKE ?", "%repair%").count
+    }
+  rescue => _e
+    @history_counts = { total: 0, returned: 0, damaged: 0, repairs: 0 }
+  end
   erb :'equipments/show'
 end
 
@@ -1180,6 +1311,20 @@ get '/equipments/:id/history' do
 
   @histories = q.order(occurred_at: :desc).limit(1000)
   @users = User.order(:username)
+  # Summary counts for this equipment's lifecycle
+  begin
+    all_hist = EquipmentHistory.where(equipment_id: @equipment.id)
+    @summary = {
+      total_events: all_hist.count,
+      assigned: all_hist.where(action: 'assigned').count,
+      returned: all_hist.where(action: 'returned').count,
+      damaged: all_hist.where(action: 'damaged').count,
+      under_repair: all_hist.where(action: 'under_repair').count,
+      other_status_changes: all_hist.where(action: 'status_change').count
+    }
+  rescue => _e
+    @summary = { total_events: 0 }
+  end
   erb :'equipments/history'
 end
 
@@ -1199,6 +1344,9 @@ get '/equipment_histories' do
   q = q.where('occurred_at <= ?', to.end_of_day) if to
   if serial_q && !serial_q.empty?
     q = q.where('details LIKE ?', "%\"serial\":%#{serial_q}%")
+  end
+  if params['action'] && !params['action'].to_s.strip.empty?
+    q = q.where(action: params['action'].to_s.strip)
   end
 
   @histories = q.order(occurred_at: :desc).limit(1000)

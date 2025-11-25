@@ -16,7 +16,7 @@
     #<%= uid %> .dist-row { max-height: 200px; opacity: 1; }
     #<%= uid %>.expanded .dist-row.extra { max-height: 200px; opacity: 1; }
   </style>
-  <div id="<%= (canvas_id || uid) %>_fallback" style="margin-top:6px; padding:8px; background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005)); border:2px dashed rgba(106,209,255,0.12); border-radius:8px;">
+  <div id="<%= (canvas_id || uid) %>_fallback" style="margin-top:6px; padding:8px; background:var(--card); border:2px dashed var(--border); border-radius:8px;">
     <%# compute label key dynamically (status/location/category) %>
     <% label_key = nil %>
     <% if rows && rows.first %>
@@ -28,17 +28,17 @@
       <% pct = ((row[:count].to_f / (max_count > 0 ? max_count : 1)) * 100).round(2) %>
       <% hidden = idx >= display_limit %>
       <div class="dist-row <%= (hidden ? 'extra' : '') %>" style="display:flex; align-items:center; gap:10px; margin-bottom:6px; padding:2px 0;">
-        <div style="width:140px; color:#cfeafc; font-size:0.95rem"><%= label %></div>
-        <div style="flex:1; background:rgba(255,255,255,0.02); height:12px; border-radius:12px; overflow:hidden;">
+        <div style="width:140px; color:var(--text); font-size:0.95rem"><%= label %></div>
+        <div style="flex:1; background:rgba(16,24,32,0.03); height:12px; border-radius:12px; overflow:hidden;">
           <div style="height:100%; width:<%= pct %>%; background:linear-gradient(90deg, rgba(54,162,235,0.95), rgba(20,80,150,0.9)); border-right:1px solid rgba(20,80,150,0.6);"></div>
         </div>
-        <div style="width:36px; text-align:right; color:#cfeafc; font-size:0.95rem"><%= row[:count] %></div>
+        <div style="width:36px; text-align:right; color:var(--muted); font-size:0.95rem"><%= row[:count] %></div>
       </div>
     <% end %>
   </div>
 
   <% if canvas_id %>
-    <canvas id="<%= canvas_id %>" class="chart-canvas" style="margin-top:10px; border:1px solid rgba(255,255,255,0.03); background: rgba(0,0,0,0.02);"></canvas>
+    <canvas id="<%= canvas_id %>" class="chart-canvas" style="margin-top:10px; border:1px solid var(--border); background: transparent;"></canvas>
 
     <% if enable_chart %>
       <script>
@@ -59,7 +59,7 @@
                         var meta = chart.getDatasetMeta(i);
                         meta.data.forEach(function(bar, index){
                           var value = dataset.data[index];
-                          ctx.fillStyle = '#cfeafc';
+                          ctx.fillStyle = '#17262e';
                           ctx.font = '12px sans-serif';
                           ctx.textAlign = 'center';
                           ctx.fillText(value, bar.x, bar.y - 6);
@@ -70,7 +70,7 @@
                   new Chart(ctx, {
                     type: 'bar',
                     data: { labels: labels, datasets: [{ label: '', data: data, backgroundColor: 'rgba(54,162,235,0.9)' }] },
-                    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ x:{ ticks:{ color:'#cfeafc' } }, y:{ ticks:{ color:'#9aa6b2' }, beginAtZero:true } } },
+                    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ x:{ ticks:{ color:'#17262e' } }, y:{ ticks:{ color:'#697b88' }, beginAtZero:true } } },
                     plugins: [labelPlugin]
                   });
                 } else {
@@ -85,9 +85,9 @@
   <% end %>
 
   <% if rows && rows.length > display_limit %>
-    <div style="text-align:right; margin-top:8px">
+      <div style="text-align:right; margin-top:8px">
       <% extra_count = rows.length - display_limit %>
-      <button type="button" class="dist-toggle" aria-expanded="false" onclick="(function(btn, uid, extraCount){ var root=document.getElementById(uid); var expanded = root.classList.toggle('expanded'); btn.setAttribute('aria-expanded', expanded); btn.textContent = expanded ? 'Show less' : ('View ' + extraCount + ' more'); })(this, '<%= uid %>', <%= extra_count %>)" style="background:transparent; border:1px solid rgba(255,255,255,0.04); padding:6px 10px; border-radius:6px; color:#cfeafc">View <%= extra_count %> more</button>
+      <button type="button" class="dist-toggle" aria-expanded="false" onclick="(function(btn, uid, extraCount){ var root=document.getElementById(uid); var expanded = root.classList.toggle('expanded'); btn.setAttribute('aria-expanded', expanded); btn.textContent = expanded ? 'Show less' : ('View ' + extraCount + ' more'); })(this, '<%= uid %>', <%= extra_count %>)" style="background:transparent; border:1px solid var(--border); padding:6px 10px; border-radius:6px; color:var(--muted)">View <%= extra_count %> more</button>
     </div>
   <% end %>
 </div>

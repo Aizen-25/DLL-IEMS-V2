@@ -126,7 +126,13 @@
             <td><%= r.checkout_date %></td>
             <td>
               <span style="padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.03)">
-                <%= (r.status.present? ? r.status : (r.equipment&.status || 'unknown')) %>
+                <%# Prefer a request-level status change note (e.g. 'Status changed to under repair') if present %>
+                <% display_status = nil %>
+                <% if r.notes && r.notes.include?('Status changed to') %>
+                  <% m = r.notes.scan(/Status changed to ([^;]+)/).last %>
+                  <% display_status = m[0].strip if m && m[0] %>
+                <% end %>
+                <%= (display_status || (r.status.present? ? r.status : (r.equipment&.status || 'unknown'))) %>
               </span>
             </td>
             <td>

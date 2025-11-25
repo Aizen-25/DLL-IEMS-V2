@@ -1,10 +1,66 @@
+<style>
+  /* History table: fixed layout to keep columns uniform and avoid layout shift */
+  .history-table { width:100%; border-collapse:collapse; table-layout:fixed; background:var(--card); border-radius:8px; overflow:hidden }
+  .history-table thead th { padding:10px 12px; text-align:left; background: rgba(10,30,40,0.6); color:var(--text); border-bottom:1px solid rgba(255,255,255,0.03) }
+  .history-table tbody td { padding:10px 12px; color:var(--muted); vertical-align:top; }
+  .history-table tbody td.details { white-space:pre-wrap; overflow:auto; max-height:140px }
+  .history-table col.col-occur { width:12% }
+  .history-table col.col-action { width:16% }
+  .history-table col.col-user { width:12% }
+  .history-table col.col-serial { width:12% }
+  .history-table col.col-details { width:48% }
+  @media (max-width:900px) {
+    .history-table { font-size:0.93rem }
+    .history-table col.col-details { width: 56% }
+    .history-table col.col-occur, .history-table col.col-action { width: auto }
+  }
+</style>
+
 <h1>Equipment History for <%= @equipment.name %></h1>
 <p style="color:var(--muted)">Serial: <strong><%= @equipment.serial || '—' %></strong> | Brand: <strong><%= @equipment.brand || '—' %></strong></p>
+
+<div style="display:flex;gap:12px;margin-top:8px;margin-bottom:12px;align-items:center">
+  <div class="form-card" style="padding:10px">
+    <div style="font-size:0.85rem;color:var(--muted)">Total events</div>
+    <div style="font-weight:700;font-size:1.2rem"><%= @summary[:total_events] || 0 %></div>
+  </div>
+  <div class="form-card" style="padding:10px">
+    <div style="font-size:0.85rem;color:var(--muted)">Assigned</div>
+    <div style="font-weight:700;font-size:1.2rem;color:var(--accent)"><%= @summary[:assigned] || 0 %></div>
+  </div>
+  <div class="form-card" style="padding:10px">
+    <div style="font-size:0.85rem;color:var(--muted)">Returned</div>
+    <div style="font-weight:700;font-size:1.2rem;color:var(--accent-green)"><%= @summary[:returned] || 0 %></div>
+  </div>
+  <div class="form-card" style="padding:10px">
+    <div style="font-size:0.85rem;color:var(--muted)">Damaged</div>
+    <div style="font-weight:700;font-size:1.2rem;color:var(--danger)"><%= @summary[:damaged] || 0 %></div>
+  </div>
+  <div class="form-card" style="padding:10px">
+    <div style="font-size:0.85rem;color:var(--muted)">Under Repair</div>
+    <div style="font-weight:700;font-size:1.2rem;color:var(--accent-orange)"><%= @summary[:under_repair] || 0 %></div>
+  </div>
+</div>
 
 <form method="get" action="/equipments/<%= @equipment.id %>/history" style="display:flex;gap:8px;align-items:end;margin-top:12px">
   <div>
     <label>User</label>
-    <select name="user_id">
+  <!-- Details modal (re-used) -->
+  <div id="detailsModal" style="display:none;position:fixed;inset:0;z-index:2000;align-items:center;justify-content:center;">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,0.6);"></div>
+    <div style="position:relative;max-width:900px;margin:6vh auto;background:var(--card);padding:16px;border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,0.6);">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <h3 style="margin:0;color:var(--accent)">Details</h3>
+        <div>
+          <button id="modalCopy" class="btn-secondary" type="button" style="margin-right:8px">Copy</button>
+          <button id="modalClose" class="btn-secondary" type="button">Close</button>
+        </div>
+      </div>
+      <pre class="modal-body" style="white-space:pre-wrap;max-height:60vh;overflow:auto;margin-top:12px;color:var(--text)"></pre>
+    </div>
+  </div>
+
+  <table class="history-table" style="width:100%;margin-top:14px">
       <option value="">Any</option>
       <% @users.each do |u| %>
         <option value="<%= u.id %>" <%= 'selected' if params['user_id'].to_s == u.id.to_s %>><%= u.username %></option>
@@ -29,7 +85,14 @@
   </div>
 </form>
 
-<table style="width:100%;margin-top:14px">
+<table class="history-table" style="width:100%;margin-top:14px">
+  <colgroup>
+    <col class="col-occur">
+    <col class="col-action">
+    <col class="col-user">
+    <col class="col-serial">
+    <col class="col-details">
+  </colgroup>
   <thead>
     <tr>
       <th>Occurred</th>
@@ -50,9 +113,55 @@
           <td><%= h.action %></td>
           <td><%= h.user ? h.user.username : '-' %></td>
           <td><%= d['serial'] || '-' %></td>
-          <td style="max-width:600px; white-space:pre-wrap"><%= h.details %></td>
+          <td class="details" style="max-width:600px">
+            <% full_text = h.details.to_s %>
+            <% preview = full_text.length > 180 ? (full_text[0,180] + '...') : full_text %>
+            <div class="details-preview"><%= preview %></div>
+            <div class="details-full" style="display:none"><%= full_text %></div>
+            <div class="details-actions" style="margin-top:6px">
+              <button class="btn-secondary btn-copy" type="button">Copy</button>
+              <button class="btn-primary btn-expand" type="button" style="margin-left:6px">Expand</button>
+            </div>
+          </td>
         </tr>
       <% end %>
     <% end %>
   </tbody>
 </table>
+
+<!-- Scripts: jQuery, DataTables, modal + copy handlers -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script>
+  $(function(){
+    // initialize DataTable
+    try{ $('.history-table').DataTable({ pageLength: 25, order:[[0,'desc']], columnDefs:[{ orderable:false, targets: [4] }] }); }catch(e){console.warn('DataTables init failed', e)}
+
+    // expand opens modal
+    $(document).on('click', '.btn-expand', function(){
+      var cell = $(this).closest('td');
+      var txt = cell.find('.details-full').text();
+      $('#detailsModal .modal-body').text(txt);
+      $('#detailsModal').css('display','flex');
+      // store current modal text for copy
+      $('#modalCopy').data('text', txt);
+    });
+
+    // copy from cell
+    $(document).on('click', '.btn-copy', function(){
+      var cell = $(this).closest('td');
+      var txt = cell.find('.details-full').text();
+      navigator.clipboard && navigator.clipboard.writeText(txt).then(function(){
+        alert('Copied to clipboard');
+      }, function(){ alert('Copy failed - select and copy manually'); });
+    });
+
+    // modal controls
+    $('#modalClose').on('click', function(){ $('#detailsModal').hide(); });
+    $('#modalCopy').on('click', function(){ var t = $(this).data('text') || $('#detailsModal .modal-body').text(); navigator.clipboard && navigator.clipboard.writeText(t).then(function(){ alert('Copied to clipboard'); }, function(){ alert('Copy failed'); }); });
+
+    // click outside modal to close
+    $('#detailsModal').on('click', function(e){ if(e.target.id === 'detailsModal') $(this).hide(); });
+  });
+</script>

@@ -1,0 +1,54 @@
+<h1>Top Damaged / Repaired Items</h1>
+
+<form method="get" action="/reports/top_repairs" style="display:flex;gap:8px;align-items:end;margin-top:12px;flex-wrap:wrap">
+  <div>
+    <label>From</label>
+    <input name="from" type="date" value="<%= @from %>">
+  </div>
+  <div>
+    <label>To</label>
+    <input name="to" type="date" value="<%= @to %>">
+  </div>
+  <div>
+    <label>Top N</label>
+    <input name="top_n" type="number" value="<%= @top_n || 10 %>" style="width:80px">
+  </div>
+  <div>
+    <button class="btn-primary" type="submit">Run</button>
+    <a class="btn-secondary" href="/reports/top_repairs">Reset</a>
+    <a class="btn-secondary" href="/reports/top_repairs.csv?top_n=<%= @top_n || 100 %>&from=<%= @from %>&to=<%= @to %>">Export CSV</a>
+  </div>
+</form>
+
+<table style="width:100%;margin-top:12px">
+  <thead>
+    <tr>
+      <th>Rank</th>
+      <th>Asset</th>
+      <th>Serial</th>
+      <th>Brand</th>
+      <th>Damaged</th>
+      <th>Repairs</th>
+      <th>Returned</th>
+      <th>Total Events</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% if @rows.empty? %>
+      <tr><td colspan="8" style="color:var(--muted);padding:12px">No results for the selected range.</td></tr>
+    <% else %>
+      <% @rows.each_with_index do |r, idx| %>
+        <tr>
+          <td><%= idx+1 %></td>
+          <td><a href="/equipments/<%= r[:equipment].id %>"><%= r[:equipment].name %></a></td>
+          <td><%= r[:equipment].serial_number %></td>
+          <td><%= r[:equipment].brand %></td>
+          <td style="color:var(--danger)"><%= r[:damaged] %></td>
+          <td style="color:var(--accent-orange)"><%= r[:repairs] %></td>
+          <td style="color:var(--accent-green)"><%= r[:returned] %></td>
+          <td><%= r[:total] %></td>
+        </tr>
+      <% end %>
+    <% end %>
+  </tbody>
+</table>
