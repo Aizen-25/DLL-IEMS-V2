@@ -84,6 +84,61 @@ def create_db_export_file(prefix = 'db_export')
   fname
 end
 
+def perform_auto_export(prefix = 'auto_export')
+  begin
+    fname = create_db_export_file(prefix)
+    src = File.join(LEGACY_EXPORT_DIR, fname)
+    gz_path = "#{src}.gz"
+
+    # record export in legacy config (so UI shows it)
+    cfg = read_legacy_config
+    cfg['auto_exported_file'] = File.basename(src)
+    cfg['auto_exported_at'] = Time.now.utc.iso8601
+    write_legacy_config(cfg)
+
+    uploaded = false
+    upload_msg = nil
+    if ENV['GITHUB_TOKEN'] && ENV['GITHUB_REPO']
+      ok, upload_msg = upload_file_to_github_repo(src)
+      uploaded = ok
+      if ok
+        cfg['uploaded_to_repo'] = ENV['GITHUB_REPO']
+        cfg['uploaded_at'] = Time.now.utc.iso8601
+        cfg['uploaded_file'] = File.basename(src)
+        write_legacy_config(cfg)
+      end
+    end
+
+    # gzip the JSON locally for storage
+    begin
+      Zlib::GzipWriter.open(gz_path) do |gz|
+        gz.write(File.read(src))
+      end
+    rescue => e
+      return [false, "Failed to gzip export: #{e.message}"]
+    end
+
+    # Attempt to upload the gzipped JSON to GitHub repo if configured
+    if ENV['GITHUB_TOKEN'] && ENV['GITHUB_REPO']
+      ok2, msg2 = upload_file_to_github_repo(gz_path)
+      if ok2
+        cfg = read_legacy_config
+        cfg['uploaded_to_repo'] = ENV['GITHUB_REPO']
+        cfg['uploaded_at'] = Time.now.utc.iso8601
+        write_legacy_config(cfg)
+        uploaded = true
+        upload_msg = msg2
+      else
+        upload_msg = [upload_msg, msg2].compact.join('; ')
+      end
+    end
+
+    return [true, "Automatic backup created: #{File.basename(src)}" + (uploaded ? " and uploaded to repo" : " (not uploaded)") + (upload_msg && !upload_msg.empty? ? ": #{upload_msg}" : "")]
+  rescue => e
+    return [false, "Failed to run automatic backup: #{e.message}"]
+  end
+end
+
 def check_and_trigger_auto_export
   cfg = read_legacy_config
   expiry = cfg['expiry_date']
@@ -98,10 +153,11 @@ def check_and_trigger_auto_export
   today = Date.today
   # Trigger automatic export when the expiry date is reached (or passed)
   if today >= expiry_date && exported.to_s.strip.empty?
-    fname = create_db_export_file('auto_export')
-    cfg['auto_exported_file'] = fname
-    cfg['auto_exported_at'] = Time.now.utc.iso8601
-    write_legacy_config(cfg)
+    # use the central perform_auto_export so expiry triggers same full flow
+    ok, msg = perform_auto_export('auto_export')
+    unless ok
+      STDERR.puts "Auto export on expiry failed: #{msg}"
+    end
   end
 end
 
