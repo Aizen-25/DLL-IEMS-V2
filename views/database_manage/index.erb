@@ -45,7 +45,20 @@
       <button class="btn-cta" type="submit">Export Database (JSON)</button>
     </form>
     <form method="post" action="/database_manage/run_backup">
-      <button class="btn-cta" type="submit">Run automatic backup</button>
+      <% if defined?(@days_left) && !@days_left.nil? %>
+        <% if @days_left > 1 %>
+          <% label = "#{@days_left} days left" %>
+        <% elsif @days_left == 1 %>
+          <% label = "1 day left" %>
+        <% elsif @days_left == 0 %>
+          <% label = "Due today" %>
+        <% else %>
+          <% label = "Expired" %>
+        <% end %>
+        <button class="btn-cta" type="submit">Run automatic backup (<%= h label %>)</button>
+      <% else %>
+        <button class="btn-cta" type="submit">Run automatic backup</button>
+      <% end %>
     </form>
     <form method="post" action="/database_manage/import" enctype="multipart/form-data">
       <label for="dbfile" style="display:inline-block; margin-right:8px">Import JSON file</label>

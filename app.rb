@@ -1592,6 +1592,7 @@ get '/database_manage' do
     begin
       ed = Date.parse(@expiry_date.to_s)
       days_left = (ed - Date.today).to_i
+      @days_left = days_left
       @expiry_status = "Legacy DB expires on #{ed.iso8601} (#{days_left} days left)"
     rescue
       @expiry_status = "Invalid expiry date configured"
