@@ -33,7 +33,15 @@ set :port, ENV.fetch('PORT', 4567).to_i
 
 # Enable sessions for login
 enable :sessions
-set :session_secret, ENV['SESSION_SECRET'] || 'inventory_system_secret_key_change_in_production_minimum_64_bytes_required_for_security'
+# Ensure SESSION_SECRET is present and at least 64 bytes long.
+# Rack/session requires a sufficiently long secret; fail-fast with a clear
+# message so the deploy logs show the problem instead of obscure runtime errors.
+secret = ENV['SESSION_SECRET'] || 'inventory_system_secret_key_change_in_production_minimum_64_bytes_required_for_security'
+if secret.to_s.length < 64
+  STDERR.puts "FATAL: SESSION_SECRET is missing or too short (#{secret.to_s.length} chars). Set SESSION_SECRET to at least 64 bytes."
+  raise "SESSION_SECRET must be set to at least 64 bytes"
+end
+set :session_secret, secret
 
 # Admin credentials (in production, use database with hashed passwords)
 ADMIN_USERNAME = 'admin'
