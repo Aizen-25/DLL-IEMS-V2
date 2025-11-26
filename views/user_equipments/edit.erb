@@ -1,0 +1,27 @@
+<div class="form-card">
+  <h1>Edit Deployed Unit — #<%= @ue.id %></h1>
+
+  <% if @error %>
+    <div class="flash" style="background:rgba(255,107,107,0.12); color:#ffdede"><%= h @error %></div>
+  <% end %>
+
+  <form method="post" action="/user_equipments/<%= @ue.id %>">
+    <div class="field">
+      <label>Serial</label>
+      <input type="text" name="serial" value="<%= h @ue.serial %>" />
+    </div>
+    <div class="field">
+      <label>Assigned At</label>
+      <input type="date" name="assigned_at" value="<%= @ue.assigned_at ? @ue.assigned_at.to_date.iso8601 : '' %>" />
+    </div>
+    <div class="field">
+      <label>Returned At</label>
+      <input type="date" name="returned_at" value="<%= @ue.returned_at ? @ue.returned_at.to_date.iso8601 : '' %>" />
+    </div>
+
+    <div class="form-actions">
+      <button class="btn-primary" type="submit">Save</button>
+      <a class="btn-secondary" href="/requests/<%= @ue.request_id %>">Cancel</a>
+    </div>
+  </form>
+</div>

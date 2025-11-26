@@ -542,6 +542,41 @@ get '/requests/:id' do
   erb :'requests_show'
 end
 
+# Edit a deployed unit (semi-admins and up)
+get '/user_equipments/:id/edit' do
+  require_at_least_semi!
+  @ue = UserEquipment.find_by(id: params[:id])
+  halt 404, "UserEquipment not found" unless @ue
+  erb :'user_equipments/edit'
+end
+
+# Update deployed unit details
+post '/user_equipments/:id' do
+  require_at_least_semi!
+  ue = UserEquipment.find_by(id: params[:id])
+  halt 404, "UserEquipment not found" unless ue
+  begin
+    # permit a small set of editable fields
+    ue.serial = params['serial'] if params.key?('serial')
+    if params['assigned_at'] && !params['assigned_at'].to_s.strip.empty?
+      ue.assigned_at = Date.parse(params['assigned_at'].to_s) rescue ue.assigned_at
+    end
+    if params['returned_at'] && !params['returned_at'].to_s.strip.empty?
+      ue.returned_at = Date.parse(params['returned_at'].to_s) rescue ue.returned_at
+    end
+    ue.save!
+    begin
+      Activity.create!(trackable: ue, action: 'user_equipment_updated', user_name: current_user&.username || 'system', changes_made: ue.attributes.to_json)
+    rescue => _e
+    end
+    redirect back
+  rescue => e
+    @error = "Failed to update: #{e.message}"
+    @ue = ue
+    erb :'user_equipments/edit'
+  end
+end
+
 post '/requests/:id/status' do
   require_super_admin!
   rq = Request.find(params[:id])

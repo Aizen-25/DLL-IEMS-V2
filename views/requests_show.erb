@@ -38,6 +38,11 @@
               <td><%= ue.user&.username || '—' %></td>
               <td><%= ue.assigned_at %></td>
               <td><%= ue.returned_at %></td>
+              <td>
+                <% if current_user && (current_user.semi_admin? || current_user.super_admin?) %>
+                  <a class="btn-secondary" href="/user_equipments/<%= ue.id %>/edit">Edit</a>
+                <% end %>
+              </td>
             </tr>
           <% end %>
         </tbody>
