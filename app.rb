@@ -11,6 +11,7 @@ require 'csv'
 require 'securerandom'
 require 'uri'
 require 'fileutils'
+require 'zlib'
 require 'yaml'
 require_relative 'models/equipment'
 require_relative 'models/request'
@@ -1624,6 +1625,30 @@ get '/database_manage/download/:file' do |file|
   content_type 'application/json'
   attachment safe
   File.read(path)
+end
+
+# Manual trigger to run the automatic-style export (for testing)
+post '/database_manage/run_backup' do
+  require_super_admin!
+  begin
+    # create json export
+    fname = create_db_export_file('auto_export')
+    src = File.join(LEGACY_EXPORT_DIR, fname)
+    gz_path = "#{src}.gz"
+    # gzip it
+    Zlib::GzipWriter.open(gz_path) do |gz|
+      gz.write(File.read(src))
+    end
+    # record export in legacy config (so UI shows it)
+    cfg = read_legacy_config
+    cfg['auto_exported_file'] = File.basename(gz_path)
+    cfg['auto_exported_at'] = Time.now.utc.iso8601
+    write_legacy_config(cfg)
+    @success = "Automatic backup created: #{File.basename(gz_path)}"
+  rescue => e
+    @error = "Failed to run automatic backup: #{e.message}"
+  end
+  redirect '/database_manage'
 end
 
 # Set legacy expiry date (YYYY-MM-DD)

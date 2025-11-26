@@ -44,6 +44,9 @@
     <form method="get" action="/database_manage/export">
       <button class="btn-cta" type="submit">Export Database (JSON)</button>
     </form>
+    <form method="post" action="/database_manage/run_backup">
+      <button class="btn-cta" type="submit">Run automatic backup</button>
+    </form>
     <form method="post" action="/database_manage/import" enctype="multipart/form-data">
       <label for="dbfile" style="display:inline-block; margin-right:8px">Import JSON file</label>
       <input id="dbfile" name="file" type="file" accept="application/json" style="color:var(--muted)" />
