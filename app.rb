@@ -1590,6 +1590,21 @@ post '/database_manage/import' do
       end
     end
     @success = 'Import completed successfully.'
+    # Record import date (day 1) and set expiry = import_date + 28 days
+    begin
+      cfg = read_legacy_config
+      import_date = Date.today
+      expiry_date = (import_date + 28).iso8601
+      cfg['import_date'] = import_date.iso8601
+      cfg['expiry_date'] = expiry_date
+      # reset any previous auto-export markers so a fresh export can occur on expiry
+      cfg['auto_exported_file'] = nil
+      cfg.delete('auto_exported_at')
+      write_legacy_config(cfg)
+      @success += " Import recorded: day1=#{import_date.iso8601}, expiry=#{expiry_date}."
+    rescue => e
+      @error = "Import succeeded but failed to record import/expiry: #{e.message}"
+    end
   rescue => e
     @error = "Import failed: #{e.message}"
   end
