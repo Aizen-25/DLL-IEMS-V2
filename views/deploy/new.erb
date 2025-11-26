@@ -145,7 +145,12 @@
             var wrapper = document.createElement('div'); wrapper.style.display='flex'; wrapper.style.gap='8px'; wrapper.style.alignItems='center';
             var inp = document.createElement('input'); inp.type='text'; inp.name = 'serials['+i+']['+c+']'; inp.placeholder = c + ' serial'; inp.style.flex='1'; inp.style.padding='8px'; inp.style.borderRadius='6px'; inp.style.background='rgba(0,0,0,0.14)'; inp.style.color='#eaf6ff'; inp.style.border='1px solid rgba(255,255,255,0.04)';
             var scanBtnLocal = document.createElement('button'); scanBtnLocal.type='button'; scanBtnLocal.className='btn-secondary'; scanBtnLocal.innerText='Scan'; scanBtnLocal.style.whiteSpace='nowrap';
-            scanBtnLocal.addEventListener('click', function(e){ e.preventDefault(); if(window.openSerialScanner){ window.openSerialScanner(inp); } else { alert('Scanner not available'); } });
+            scanBtnLocal.addEventListener('click', function(e){ e.preventDefault();
+              // set the current serial input target and open the existing scanner modal
+              currentSerialTarget = inp;
+              guidedMode = false;
+              openScanner();
+            });
             wrapper.appendChild(inp); wrapper.appendChild(scanBtnLocal);
             fld.appendChild(lbl); fld.appendChild(wrapper); box.appendChild(fld);
         });
