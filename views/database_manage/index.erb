@@ -25,7 +25,7 @@
     <% if @auto_export_file %>
       <div style="margin-top:8px">
         <strong>Auto-export created:</strong>
-        <a href="/database_manage/download/<%= URI.encode(@auto_export_file) %>"><%= h @auto_export_file %></a>
+        <a href="/database_manage/download/<%= URI::DEFAULT_PARSER.escape(@auto_export_file) %>"><%= h @auto_export_file %></a>
       </div>
     <% end %>
     <% if @exports && @exports.any? %>
@@ -33,7 +33,7 @@
         <strong>Available exports:</strong>
         <ul>
           <% @exports.each do |f| %>
-            <li><a href="/database_manage/download/<%= URI.encode(f) %>"><%= h f %></a></li>
+            <li><a href="/database_manage/download/<%= URI::DEFAULT_PARSER.escape(f) %>"><%= h f %></a></li>
           <% end %>
         </ul>
       </div>
