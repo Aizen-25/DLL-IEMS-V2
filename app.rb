@@ -12,6 +12,8 @@ require 'securerandom'
 require 'uri'
 require 'fileutils'
 require 'zlib'
+require 'open3'
+require 'tmpdir'
 require 'yaml'
 require_relative 'models/equipment'
 require_relative 'models/request'
@@ -1644,11 +1646,64 @@ post '/database_manage/run_backup' do
     cfg['auto_exported_file'] = File.basename(gz_path)
     cfg['auto_exported_at'] = Time.now.utc.iso8601
     write_legacy_config(cfg)
+
+    # Attempt to upload to GitHub backup repo if configured
+    uploaded = false
+    upload_msg = nil
+    if ENV['GITHUB_TOKEN'] && ENV['GITHUB_REPO']
+      ok, upload_msg = upload_file_to_github_repo(gz_path)
+      uploaded = ok
+      if ok
+        cfg['uploaded_to_repo'] = ENV['GITHUB_REPO']
+        cfg['uploaded_at'] = Time.now.utc.iso8601
+        write_legacy_config(cfg)
+      end
+    end
+
     @success = "Automatic backup created: #{File.basename(gz_path)}"
+    @success += uploaded ? " and uploaded to repo" : " (not uploaded to repo)"
+    @success += ": #{upload_msg}" if upload_msg && !upload_msg.empty?
   rescue => e
     @error = "Failed to run automatic backup: #{e.message}"
   end
   redirect '/database_manage'
+end
+
+
+def upload_file_to_github_repo(path)
+  token = ENV['GITHUB_TOKEN']
+  repo = ENV['GITHUB_REPO']
+  unless token && repo && !token.to_s.strip.empty?
+    return [false, 'GITHUB_TOKEN or GITHUB_REPO not set']
+  end
+
+  begin
+    Dir.mktmpdir('backup_push') do |td|
+      repo_dir = File.join(td, 'repo')
+      FileUtils.mkdir_p(repo_dir)
+      Dir.chdir(repo_dir) do
+        # Initialize a small git repo and push the backup file into a backups branch
+        Open3.capture3('git', 'init')
+        Open3.capture3('git', 'config', 'user.name', 'auto-backup')
+        Open3.capture3('git', 'config', 'user.email', 'auto-backup@example.com')
+        FileUtils.mkdir_p('backups')
+        dest = File.join('backups', File.basename(path))
+        FileUtils.cp(path, dest)
+        Open3.capture3('git', 'add', '.')
+        Open3.capture3('git', 'commit', '-m', "Add backup #{File.basename(path)}")
+        remote_url = "https://x-access-token:#{token}@github.com/#{repo}.git"
+        Open3.capture3('git', 'remote', 'add', 'origin', remote_url)
+        out, err, st = Open3.capture3('git', 'push', 'origin', 'HEAD:refs/heads/backups')
+        if st.success?
+          return [true, out.to_s.strip]
+        else
+          return [false, err.to_s.strip.empty? ? out.to_s.strip : err.to_s.strip]
+        end
+      end
+    end
+  rescue => e
+    return [false, e.message]
+  end
 end
 
 # Set legacy expiry date (YYYY-MM-DD)

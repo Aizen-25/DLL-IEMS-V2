@@ -38,6 +38,23 @@ namespace :db do
       cfg['auto_exported_at'] = Time.now.utc.iso8601
       write_legacy_config(cfg)
       puts "Exported DB to #{gz_path} and recorded in config."
+      # Attempt to upload to GitHub repo if configured
+      if ENV['GITHUB_TOKEN'] && ENV['GITHUB_REPO']
+        begin
+          ok, msg = upload_file_to_github_repo(gz_path)
+          if ok
+            cfg = read_legacy_config
+            cfg['uploaded_to_repo'] = ENV['GITHUB_REPO']
+            cfg['uploaded_at'] = Time.now.utc.iso8601
+            write_legacy_config(cfg)
+            puts "Uploaded backup to #{ENV['GITHUB_REPO']}: #{msg}"
+          else
+            puts "Failed to upload backup: #{msg}"
+          end
+        rescue => e
+          puts "Upload attempt failed: #{e.message}"
+        end
+      end
     else
       puts "No export needed. Today=#{today}, expiry=#{expiry_date}, exported=#{cfg['auto_exported_file']}"
     end
