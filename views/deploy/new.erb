@@ -140,10 +140,14 @@
         var title = document.createElement('div'); title.style.fontWeight='600'; title.style.marginBottom='6px'; title.innerText = 'Unit ' + (i+1);
         box.appendChild(title);
         components.forEach(function(c){
-          var fld = document.createElement('div'); fld.style.marginBottom='6px';
-          var lbl = document.createElement('label'); lbl.innerText = c.replace('_',' ') ; lbl.style.display='block'; lbl.style.marginBottom='4px';
-          var inp = document.createElement('input'); inp.type='text'; inp.name = 'serials['+i+']['+c+']'; inp.placeholder = c + ' serial'; inp.style.width='100%'; inp.style.padding='8px'; inp.style.borderRadius='6px'; inp.style.background='rgba(0,0,0,0.14)'; inp.style.color='#eaf6ff'; inp.style.border='1px solid rgba(255,255,255,0.04)';
-          fld.appendChild(lbl); fld.appendChild(inp); box.appendChild(fld);
+            var fld = document.createElement('div'); fld.style.marginBottom='6px';
+            var lbl = document.createElement('label'); lbl.innerText = c.replace('_',' ') ; lbl.style.display='block'; lbl.style.marginBottom='4px';
+            var wrapper = document.createElement('div'); wrapper.style.display='flex'; wrapper.style.gap='8px'; wrapper.style.alignItems='center';
+            var inp = document.createElement('input'); inp.type='text'; inp.name = 'serials['+i+']['+c+']'; inp.placeholder = c + ' serial'; inp.style.flex='1'; inp.style.padding='8px'; inp.style.borderRadius='6px'; inp.style.background='rgba(0,0,0,0.14)'; inp.style.color='#eaf6ff'; inp.style.border='1px solid rgba(255,255,255,0.04)';
+            var scanBtnLocal = document.createElement('button'); scanBtnLocal.type='button'; scanBtnLocal.className='btn-secondary'; scanBtnLocal.innerText='Scan'; scanBtnLocal.style.whiteSpace='nowrap';
+            scanBtnLocal.addEventListener('click', function(e){ e.preventDefault(); if(window.openSerialScanner){ window.openSerialScanner(inp); } else { alert('Scanner not available'); } });
+            wrapper.appendChild(inp); wrapper.appendChild(scanBtnLocal);
+            fld.appendChild(lbl); fld.appendChild(wrapper); box.appendChild(fld);
         });
         container.appendChild(box);
       }
@@ -201,6 +205,7 @@
     var barcodeDetector = null;
     var zxingReader = null;
     var scanning = false;
+    var currentSerialTarget = null; // when scanning for component inputs, set this to the target input
 
     async function startCamera(){
       try{
@@ -252,7 +257,10 @@
 
     function onDetected(text){
       scanning = false;
-      serialInput.value = text;
+      try{
+        var target = currentSerialTarget || serialInput;
+        if(target) target.value = text;
+      }catch(e){ console.error('Failed to place detected value', e); }
       closeScanner();
     }
 
@@ -274,7 +282,11 @@
       try{ if(zxingReader){ zxingReader.reset(); zxingReader = null; } }catch(e){}
     }
 
-    scanBtn.addEventListener('click', function(){ openScanner(); });
+    scanBtn.addEventListener('click', function(){
+      // default single serial behavior
+      currentSerialTarget = serialInput;
+      openScanner();
+    });
     closeBtn.addEventListener('click', function(){ closeScanner(); });
 
     usePhoto.addEventListener('click', function(){ fileInput.click(); });
@@ -390,6 +402,7 @@
           var decoded = await attemptDecodeWithTransforms(img);
           if(decoded){
             if(confirm('Detected: "' + decoded + '"\nFill this into the Serial Number field?')){
+              // place into the currently targeted input or default serial input
               onDetected(decoded);
               return;
             } else {
