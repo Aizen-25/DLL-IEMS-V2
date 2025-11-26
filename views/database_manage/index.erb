@@ -12,6 +12,34 @@
     <p>Use these tools to export the full database to a JSON file or import a previously exported JSON file. Only super-admins can perform these actions.</p>
   </div>
 
+  <div style="margin-bottom:18px">
+    <h3>Legacy DB expiry & automatic export</h3>
+    <form method="post" action="/database_manage/set_expiry" style="margin-bottom:8px">
+      <label for="expiry_date">Legacy DB expiry date (UTC):</label>
+      <input id="expiry_date" name="expiry_date" type="date" value="<%= @expiry_date %>" />
+      <button class="btn-secondary" type="submit">Save expiry</button>
+    </form>
+    <% if @expiry_status %>
+      <div style="color:var(--muted)"><%= h @expiry_status %></div>
+    <% end %>
+    <% if @auto_export_file %>
+      <div style="margin-top:8px">
+        <strong>Auto-export created:</strong>
+        <a href="/database_manage/download/<%= URI.encode(@auto_export_file) %>"><%= h @auto_export_file %></a>
+      </div>
+    <% end %>
+    <% if @exports && @exports.any? %>
+      <div style="margin-top:8px">
+        <strong>Available exports:</strong>
+        <ul>
+          <% @exports.each do |f| %>
+            <li><a href="/database_manage/download/<%= URI.encode(f) %>"><%= h f %></a></li>
+          <% end %>
+        </ul>
+      </div>
+    <% end %>
+  </div>
+
   <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px">
     <form method="get" action="/database_manage/export">
       <button class="btn-cta" type="submit">Export Database (JSON)</button>

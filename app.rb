@@ -10,6 +10,7 @@ require 'json'
 require 'csv'
 require 'securerandom'
 require 'uri'
+require 'yaml'
 require_relative 'models/equipment'
 require_relative 'models/request'
 require_relative 'models/activity'
@@ -42,6 +43,76 @@ if secret.to_s.length < 64
   raise "SESSION_SECRET must be set to at least 64 bytes"
 end
 set :session_secret, secret
+
+# Path to store legacy migration metadata and exports
+LEGACY_CONFIG_PATH = File.join(Dir.pwd, 'tmp', 'legacy_migration.yml')
+LEGACY_EXPORT_DIR = File.join(Dir.pwd, 'tmp', 'db_exports')
+FileUtils.mkdir_p(LEGACY_EXPORT_DIR) unless Dir.exist?(LEGACY_EXPORT_DIR)
+
+def read_legacy_config
+  if File.exist?(LEGACY_CONFIG_PATH)
+    YAML.load_file(LEGACY_CONFIG_PATH) || {}
+  else
+    {}
+  end
+end
+
+def write_legacy_config(hash)
+  FileUtils.mkdir_p(File.dirname(LEGACY_CONFIG_PATH))
+  File.write(LEGACY_CONFIG_PATH, hash.to_yaml)
+end
+
+def create_db_export_file(prefix = 'db_export')
+  now = Time.now.utc.strftime('%Y%m%d%H%M%S')
+  fname = "#{prefix}_#{now}.json"
+  path = File.join(LEGACY_EXPORT_DIR, fname)
+  tables = ActiveRecord::Base.connection.tables - %w[schema_migrations ar_internal_metadata]
+  payload = {}
+  tables.each do |t|
+    begin
+      rows = ActiveRecord::Base.connection.exec_query("SELECT * FROM #{ActiveRecord::Base.connection.quote_table_name(t)}").to_a
+      payload[t] = rows
+    rescue => e
+      payload[t] = { 'error' => e.message }
+    end
+  end
+  File.write(path, JSON.pretty_generate(payload))
+  fname
+end
+
+def check_and_trigger_auto_export
+  cfg = read_legacy_config
+  expiry = cfg['expiry_date']
+  exported = cfg['auto_exported_file']
+  return unless expiry
+  begin
+    expiry_date = Date.parse(expiry.to_s)
+  rescue
+    return
+  end
+
+  threshold = expiry_date - 29
+  today = Date.today
+  # Trigger automatic export when today >= threshold and not already exported
+  if today >= threshold && exported.to_s.strip.empty?
+    fname = create_db_export_file('auto_export')
+    cfg['auto_exported_file'] = fname
+    cfg['auto_exported_at'] = Time.now.utc.iso8601
+    write_legacy_config(cfg)
+  end
+end
+
+# Start a background thread to check expiry once per day
+Thread.new do
+  loop do
+    begin
+      check_and_trigger_auto_export
+    rescue => e
+      STDERR.puts "Legacy export checker failed: #{e.message}"
+    end
+    sleep 60 * 60 * 24
+  end
+end
 
 # Admin credentials (in production, use database with hashed passwords)
 ADMIN_USERNAME = 'admin'
@@ -1455,26 +1526,32 @@ end
 # Database management: export/import JSON (super-admin only)
 get '/database_manage' do
   require_super_admin!
+  # Provide expiry status and list available exports
+  cfg = read_legacy_config
+  @expiry_date = cfg['expiry_date']
+  if @expiry_date
+    begin
+      ed = Date.parse(@expiry_date.to_s)
+      days_left = (ed - Date.today).to_i
+      @expiry_status = "Legacy DB expires on #{ed.iso8601} (#{days_left} days left)"
+    rescue
+      @expiry_status = "Invalid expiry date configured"
+    end
+  end
+  @auto_export_file = cfg['auto_exported_file']
+  @exports = Dir.glob(File.join(LEGACY_EXPORT_DIR, '*.json')).map { |p| File.basename(p) }.sort.reverse
+
   erb :'database_manage/index'
 end
 
 get '/database_manage/export' do
   require_super_admin!
-  tables = ActiveRecord::Base.connection.tables - %w[schema_migrations ar_internal_metadata]
-  payload = {}
-  tables.each do |t|
-    begin
-      rows = ActiveRecord::Base.connection.exec_query("SELECT * FROM #{ActiveRecord::Base.connection.quote_table_name(t)}").to_a
-      payload[t] = rows
-    rescue => e
-      payload[t] = { 'error' => e.message }
-    end
-  end
-
-  fname = "db_export_#{Time.now.utc.strftime('%Y%m%d%H%M%S')}.json"
+  # Create export file on disk and return it as download
+  fname = create_db_export_file('manual_export')
+  path = File.join(LEGACY_EXPORT_DIR, fname)
   content_type 'application/json'
   attachment fname
-  payload.to_json
+  File.read(path)
 end
 
 post '/database_manage/import' do
@@ -1518,6 +1595,40 @@ post '/database_manage/import' do
   end
 
   erb :'database_manage/index'
+end
+
+# Download saved export file
+get '/database_manage/download/:file' do |file|
+  require_super_admin!
+  safe = File.basename(file)
+  path = File.join(LEGACY_EXPORT_DIR, safe)
+  unless File.exist?(path)
+    status 404
+    return "File not found"
+  end
+  content_type 'application/json'
+  attachment safe
+  File.read(path)
+end
+
+# Set legacy expiry date (YYYY-MM-DD)
+post '/database_manage/set_expiry' do
+  require_super_admin!
+  date = params['expiry_date']
+  begin
+    Date.parse(date.to_s)
+  rescue => e
+    @error = "Invalid date: #{e.message}"
+    return erb :'database_manage/index'
+  end
+  cfg = read_legacy_config
+  cfg['expiry_date'] = date
+  # Reset auto export flag when expiry changes
+  cfg['auto_exported_file'] = nil
+  cfg.delete('auto_exported_at')
+  write_legacy_config(cfg)
+  @success = "Expiry date saved: #{date}"
+  redirect '/database_manage'
 end
 
 # Endpoint to receive client-side JS errors for debugging
