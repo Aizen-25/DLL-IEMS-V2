@@ -45,7 +45,7 @@
       <button class="btn-cta" type="submit">Export Database (JSON)</button>
     </form>
     <form method="post" action="/database_manage/run_backup">
-      <% if defined?(@days_left) && !@days_left.nil? %>
+      <% if defined?(@days_left) && !@days_left.nil? && @expiry_date %>
         <% if @days_left > 1 %>
           <% label = "#{@days_left} days left" %>
         <% elsif @days_left == 1 %>
@@ -55,7 +55,9 @@
         <% else %>
           <% label = "Expired" %>
         <% end %>
-        <button class="btn-cta" type="submit">Run automatic backup (<%= h label %>)</button>
+        <button id="auto-backup-btn" class="btn-cta" type="submit" data-expiry="<%= h @expiry_date %>">
+          Run automatic backup (<span id="auto-backup-label"><%= h label %></span>)
+        </button>
       <% else %>
         <button class="btn-cta" type="submit">Run automatic backup</button>
       <% end %>
@@ -76,3 +78,32 @@
     </ul>
   </div>
 </div>
+
+<script>
+  (function() {
+    var btn = document.getElementById('auto-backup-btn');
+    var label = document.getElementById('auto-backup-label');
+    if (!btn || !label) return;
+    var expiry = btn.getAttribute('data-expiry'); // YYYY-MM-DD
+    if (!expiry) return;
+    // treat expiry as UTC date start (00:00:00Z)
+    var target = new Date(expiry + 'T00:00:00Z');
+
+    function updateLabel() {
+      var now = new Date();
+      var nowUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      var targUTC = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+      var daysLeft = Math.floor((targUTC - nowUTC) / (24*60*60*1000));
+      var text;
+      if (daysLeft > 1) text = daysLeft + ' days left';
+      else if (daysLeft === 1) text = '1 day left';
+      else if (daysLeft === 0) text = 'Due today';
+      else text = 'Expired';
+      label.textContent = text;
+    }
+
+    updateLabel();
+    // update every 60 seconds
+    setInterval(updateLabel, 60000);
+  })();
+</script>
