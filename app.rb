@@ -84,6 +84,31 @@ def create_db_export_file(prefix = 'db_export')
   fname
 end
 
+def reset_serial_sequences(tables = nil)
+  conn = ActiveRecord::Base.connection
+  begin
+    rows = conn.exec_query(<<~SQL)
+      SELECT table_name, column_name
+      FROM information_schema.columns
+      WHERE column_default LIKE 'nextval(%' AND table_schema='public'
+    SQL
+
+    rows.each do |r|
+      table = r['table_name']
+      col = r['column_name']
+      next if tables && !tables.include?(table)
+      begin
+        # set sequence to max(id) so nextval returns max+1
+        conn.execute("SELECT setval(pg_get_serial_sequence('" + table + "','" + col + "'), COALESCE((SELECT MAX(" + col + ") FROM " + table + "),0), true)")
+      rescue => e
+        STDERR.puts "Failed to reset sequence for #{table}.#{col}: #{e.message}"
+      end
+    end
+  rescue => e
+    STDERR.puts "Failed to query sequences: #{e.message}"
+  end
+end
+
 def perform_auto_export(prefix = 'auto_export')
   begin
     fname = create_db_export_file(prefix)
@@ -1650,6 +1675,17 @@ post '/database_manage/import' do
       end
     end
     @success = 'Import completed successfully.'
+
+    # After import, reset serial/identity sequences for imported tables (Postgres only)
+    begin
+      if conn.adapter_name.to_s.downcase.include?('postg')
+        reset_serial_sequences(data.keys)
+        @success += ' DB sequences reset.'
+      end
+    rescue => e
+      STDERR.puts "Failed to reset sequences after import: #{e.message}"
+      @success += " (Warning: failed to reset DB sequences: #{e.message})"
+    end
     # Record import date (day 1) and set expiry = import_date + 28 days
     begin
       cfg = read_legacy_config
