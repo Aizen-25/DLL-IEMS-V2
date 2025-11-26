@@ -10,6 +10,7 @@ require 'json'
 require 'csv'
 require 'securerandom'
 require 'uri'
+require 'fileutils'
 require 'yaml'
 require_relative 'models/equipment'
 require_relative 'models/request'
@@ -91,10 +92,9 @@ def check_and_trigger_auto_export
     return
   end
 
-  threshold = expiry_date - 29
   today = Date.today
-  # Trigger automatic export when today >= threshold and not already exported
-  if today >= threshold && exported.to_s.strip.empty?
+  # Trigger automatic export when the expiry date is reached (or passed)
+  if today >= expiry_date && exported.to_s.strip.empty?
     fname = create_db_export_file('auto_export')
     cfg['auto_exported_file'] = fname
     cfg['auto_exported_at'] = Time.now.utc.iso8601
