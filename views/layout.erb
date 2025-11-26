@@ -22,14 +22,16 @@
       /* Responsive: overlay sidebar on small screens */
       @media (max-width: 820px) {
         .app { flex-direction:column }
-        .sidebar { position:fixed; left:0; top:0; bottom:0; width:260px; transform:translateX(-110%); transition: transform 260ms cubic-bezier(.2,.9,.24,1); z-index:1000; box-shadow: 4px 8px 30px rgba(0,0,0,0.6); background: linear-gradient(180deg,#07101a 0%, #0f1720 100%); }
+        .sidebar { position:fixed; left:0; top:0; bottom:0; width:80%; max-width:320px; transform:translateX(-110%); transition: transform 260ms cubic-bezier(.2,.9,.24,1); z-index:1000; box-shadow: 4px 8px 30px rgba(0,0,0,0.6); background: linear-gradient(180deg,#07101a 0%, #0f1720 100%); }
         .sidebar.open { transform: translateX(0); }
         .nav { display:block; gap:8px }
         .nav li { margin:8px 0 }
+        .nav a { padding:12px; font-size:1.05rem }
         .sidebar-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:900; opacity:0; transition:opacity 160ms ease; pointer-events:none }
         .sidebar-backdrop.visible { opacity:1; pointer-events:auto }
+        #sidebarToggle { display:inline-block }
       }
-      .sidebar-toggle { cursor:pointer }
+      #sidebarToggle { display:none; cursor:pointer }
       table { border-collapse: collapse; width: 100%; background:var(--card); color:var(--muted) }
       th, td { text-align: left; padding: 8px; }
       th { background: rgba(255,255,255,0.04); color:#d7e9fb }
@@ -132,7 +134,7 @@
         <div class="container">
           <div class="topbar">
                 <div style="display:flex; align-items:center; gap:12px">
-                  <button id="sidebarToggle" class="sidebar-toggle" aria-label="Toggle menu" style="display:none; background:transparent; border:none; color:var(--accent); font-size:1.2rem">☰</button>
+                  <button id="sidebarToggle" class="sidebar-toggle" aria-label="Toggle menu">☰</button>
                   <a href="/dashboard">Home</a>
                 </div>
             <div class="muted">&nbsp;</div>
