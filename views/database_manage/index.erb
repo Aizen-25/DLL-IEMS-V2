@@ -1,0 +1,34 @@
+<div class="card form-card">
+  <h2>Database Manage</h2>
+
+  <% if @error %>
+    <div class="flash" style="background:rgba(255,107,107,0.12); color:#ffdede"><%= h @error %></div>
+  <% end %>
+  <% if @success %>
+    <div class="flash" style="background:linear-gradient(90deg, rgba(154,234,106,0.12), rgba(138,200,255,0.06)); color:#dff8c6"><%= h @success %></div>
+  <% end %>
+
+  <div style="margin-bottom:18px">
+    <p>Use these tools to export the full database to a JSON file or import a previously exported JSON file. Only super-admins can perform these actions.</p>
+  </div>
+
+  <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px">
+    <form method="get" action="/database_manage/export">
+      <button class="btn-cta" type="submit">Export Database (JSON)</button>
+    </form>
+    <form method="post" action="/database_manage/import" enctype="multipart/form-data">
+      <label for="dbfile" style="display:inline-block; margin-right:8px">Import JSON file</label>
+      <input id="dbfile" name="file" type="file" accept="application/json" style="color:var(--muted)" />
+      <button class="btn-secondary" type="submit">Upload & Import</button>
+    </form>
+  </div>
+
+  <div style="font-size:0.9rem; color:var(--muted)">
+    <strong>Notes:</strong>
+    <ul>
+      <li>Export creates a JSON object mapping table names to arrays of row objects.</li>
+      <li>Import will truncate destination tables (except schema migrations) and insert rows from the file. <strong>Back up before importing.</strong></li>
+      <li>This is intended for migrations between accounts or backups. Large databases may produce large files.</li>
+    </ul>
+  </div>
+</div>

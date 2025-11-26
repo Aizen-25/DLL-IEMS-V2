@@ -1452,6 +1452,74 @@ get '/settings' do
   erb :'settings'
 end
 
+# Database management: export/import JSON (super-admin only)
+get '/database_manage' do
+  require_super_admin!
+  erb :'database_manage/index'
+end
+
+get '/database_manage/export' do
+  require_super_admin!
+  tables = ActiveRecord::Base.connection.tables - %w[schema_migrations ar_internal_metadata]
+  payload = {}
+  tables.each do |t|
+    begin
+      rows = ActiveRecord::Base.connection.exec_query("SELECT * FROM #{ActiveRecord::Base.connection.quote_table_name(t)}").to_a
+      payload[t] = rows
+    rescue => e
+      payload[t] = { 'error' => e.message }
+    end
+  end
+
+  fname = "db_export_#{Time.now.utc.strftime('%Y%m%d%H%M%S')}.json"
+  content_type 'application/json'
+  attachment fname
+  payload.to_json
+end
+
+post '/database_manage/import' do
+  require_super_admin!
+  unless params[:file] && params[:file][:tempfile]
+    @error = 'No file uploaded'
+    return erb :'database_manage/index'
+  end
+
+  begin
+    data = JSON.parse(params[:file][:tempfile].read)
+  rescue => e
+    @error = "Failed to parse JSON: #{e.message}"
+    return erb :'database_manage/index'
+  end
+
+  conn = ActiveRecord::Base.connection
+  begin
+    conn.transaction do
+      data.each do |table, rows|
+        next if ['schema_migrations', 'ar_internal_metadata'].include?(table)
+        # Ensure rows is an array
+        unless rows.is_a?(Array)
+          raise "Invalid data for table #{table}"
+        end
+
+        # Truncate table and reset identity
+        conn.execute("TRUNCATE TABLE #{conn.quote_table_name(table)} RESTART IDENTITY CASCADE")
+
+        rows.each do |row|
+          cols = row.keys.map { |c| conn.quote_column_name(c) }
+          vals = row.values.map { |v| conn.quote(v) }
+          sql = "INSERT INTO #{conn.quote_table_name(table)} (#{cols.join(',')}) VALUES (#{vals.join(',')})"
+          conn.execute(sql)
+        end
+      end
+    end
+    @success = 'Import completed successfully.'
+  rescue => e
+    @error = "Import failed: #{e.message}"
+  end
+
+  erb :'database_manage/index'
+end
+
 # Endpoint to receive client-side JS errors for debugging
 # client-side error reporting removed (no-op in production)
 

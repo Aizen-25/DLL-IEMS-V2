@@ -120,6 +120,9 @@
           <li><a href="/reports/analytics"><span class="icon">📊</span><span>Analytics</span></a></li>
           <li><a href="/repairs"><span class="icon">🔧</span><span>Equipment Repair</span></a></li>
           <li><a href="/settings"><span class="icon">⚙️</span><span>Settings</span></a></li>
+          <% if current_user && current_user.super_admin? %>
+            <li><a href="/database_manage"><span class="icon">🗄️</span><span>Database Manage</span></a></li>
+          <% end %>
         </ul>
         
         <div style="position:absolute; bottom:18px; width:calc(100% - 36px)">
