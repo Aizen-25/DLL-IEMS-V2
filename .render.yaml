@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: DLL-IEMS-V2-web
+    env: ruby
+    repo: https://github.com/Aizen-25/DLL-IEMS-V2
+    branch: stable-style
+    buildCommand: bin/render-build.sh
+    startCommand: bundle exec rackup config.ru -p $PORT
+    autoDeploy: true
+    plan: starter
+    envVars:
+      - key: RACK_ENV
+        value: production
+      - key: RAILS_ENV
+        value: production
+    regions:
+      - oregon

@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-# Default envs
-: ${DB_HOST:=db}
-: ${DB_PORT:=5432}
-: ${DB_USER:=postgres}
-: ${DB_PASS:=postgres}
-: ${DB_NAME:=inventory_development}
+# Defaults
+DB_HOST=${DB_HOST:-db}
+DB_PORT=${DB_PORT:-5432}
 
-echo "Waiting for Postgres at ${DB_HOST}:${DB_PORT}..."
-for i in {1..60}; do
-  # attempt to open TCP connection
-  (echo > /dev/tcp/${DB_HOST}/${DB_PORT}) >/dev/null 2>&1 && break
-  echo "Postgres not available yet (${i})..."
-  sleep 1
-done
+# Wait for Postgres only if a DATABASE_URL is provided or DB_HOST looks reachable
+if [ -n "${DATABASE_URL:-}" ]; then
+  echo "DATABASE_URL detected — waiting for Postgres at ${DB_HOST}:${DB_PORT}..."
+  for i in $(seq 1 60); do
+    (echo > /dev/tcp/${DB_HOST}/${DB_PORT}) >/dev/null 2>&1 && break
+    echo "Postgres not available yet (${i})..."
+    sleep 1
+  done
 
-echo "Postgres appears reachable. Running migrations..."
-export RACK_ENV=${RACK_ENV:-development}
-bundle exec rake db:create db:migrate || true
+  echo "Running DB migrations"
+  bundle exec rake db:migrate
+else
+  echo "No DATABASE_URL — skipping DB wait and migrations"
+fi
 
-echo "Starting app on 0.0.0.0:4567"
-bundle exec rackup -o 0.0.0.0 -p 4567
+echo "Starting app on 0.0.0.0:${PORT:-4567}"
+exec bundle exec rackup -o 0.0.0.0 -p ${PORT:-4567}
