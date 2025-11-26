@@ -19,3 +19,9 @@ if [ -n "${DATABASE_URL:-}" ]; then
 else
 	echo "No DATABASE_URL detected — skipping migrations"
 fi
+	
+# If a legacy DB is provided, copy its data into the current DB after migrations
+if [ -n "${LEGACY_DATABASE_URL:-}" ]; then
+	echo "LEGACY_DATABASE_URL detected — running legacy -> current DB transfer"
+	bundle exec rake db:transfer_from_legacy || echo "Warning: db:transfer_from_legacy failed (check logs)"
+fi
