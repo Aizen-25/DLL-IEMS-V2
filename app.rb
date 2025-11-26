@@ -1637,30 +1637,32 @@ post '/database_manage/run_backup' do
     fname = create_db_export_file('auto_export')
     src = File.join(LEGACY_EXPORT_DIR, fname)
     gz_path = "#{src}.gz"
-    # gzip it
-    Zlib::GzipWriter.open(gz_path) do |gz|
-      gz.write(File.read(src))
-    end
     # record export in legacy config (so UI shows it)
     cfg = read_legacy_config
-    cfg['auto_exported_file'] = File.basename(gz_path)
+    cfg['auto_exported_file'] = File.basename(src)
     cfg['auto_exported_at'] = Time.now.utc.iso8601
     write_legacy_config(cfg)
 
-    # Attempt to upload to GitHub backup repo if configured
+    # Attempt to upload the raw JSON to GitHub backup repo if configured
     uploaded = false
     upload_msg = nil
     if ENV['GITHUB_TOKEN'] && ENV['GITHUB_REPO']
-      ok, upload_msg = upload_file_to_github_repo(gz_path)
+      ok, upload_msg = upload_file_to_github_repo(src)
       uploaded = ok
       if ok
         cfg['uploaded_to_repo'] = ENV['GITHUB_REPO']
         cfg['uploaded_at'] = Time.now.utc.iso8601
+        cfg['uploaded_file'] = File.basename(src)
         write_legacy_config(cfg)
       end
     end
 
-    @success = "Automatic backup created: #{File.basename(gz_path)}"
+    # gzip the JSON locally for storage
+    Zlib::GzipWriter.open(gz_path) do |gz|
+      gz.write(File.read(src))
+    end
+
+    @success = "Automatic backup created: #{File.basename(src)}"
     @success += uploaded ? " and uploaded to repo" : " (not uploaded to repo)"
     @success += ": #{upload_msg}" if upload_msg && !upload_msg.empty?
   rescue => e
