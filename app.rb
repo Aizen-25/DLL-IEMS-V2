@@ -1773,6 +1773,24 @@ get '/database_manage' do
   erb :'database_manage/index'
 end
 
+# Temporary admin route to inspect legacy export/upload diagnostics
+get '/admin/legacy_export_status' do
+  require_super_admin!
+  cfg = read_legacy_config
+  content_type 'text/plain'
+  out = []
+  out << "Legacy config file: #{LEGACY_CONFIG_PATH}"
+  out << "auto_exported_file: #{cfg['auto_exported_file'].to_s}"
+  out << "auto_exported_at: #{cfg['auto_exported_at'].to_s}"
+  out << "uploaded_to_repo: #{cfg['uploaded_to_repo'].to_s}"
+  out << "uploaded_at: #{cfg['uploaded_at'].to_s}"
+  out << "uploaded_file: #{cfg['uploaded_file'].to_s}"
+  out << "uploaded_gz: #{cfg['uploaded_gz'].to_s}"
+  out << "auto_export_upload_error: #{cfg['auto_export_upload_error'].to_s}"
+  out << "full_yaml:\n" + (File.exist?(LEGACY_CONFIG_PATH) ? File.read(LEGACY_CONFIG_PATH) : "(not present)")
+  out.join("\n\n")
+end
+
 get '/database_manage/export' do
   require_super_admin!
   # Create export file on disk and return it as download
