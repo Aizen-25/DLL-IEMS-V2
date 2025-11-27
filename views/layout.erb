@@ -136,13 +136,13 @@
                  end %>
             <button class="nav-dropdown-toggle" aria-expanded="false" aria-controls="officeDropdown"><span class="icon">🏢</span><span>Office virtualization</span></button>
             <ul id="officeDropdown" class="nav-dropdown" role="menu" aria-hidden="true">
-              <% if locations.empty? %>
-                <li class="muted" style="padding:6px 10px;color:var(--muted)">No offices found</li>
-              <% else %>
-                <% locations.each do |loc| %>
-                  <li role="none"><a role="menuitem" href="/equipments?location=<%= URI.encode(loc) %>"><span class="icon">📍</span><span><%= h loc %></span></a></li>
+                <% if locations.empty? %>
+                  <li class="muted" style="padding:6px 10px;color:var(--muted)">No offices found</li>
+                <% else %>
+                  <% locations.each do |loc| %>
+                    <li role="none"><a role="menuitem" href="/equipments?location=<%= CGI.escape(loc.to_s) %>"><span class="icon">📍</span><span><%= h loc %></span></a></li>
+                  <% end %>
                 <% end %>
-              <% end %>
             </ul>
           </li>
           <li>
