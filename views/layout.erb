@@ -35,6 +35,12 @@
       /* Active nav item highlight */
       .nav a.active { background: linear-gradient(90deg, rgba(106,209,255,0.06), rgba(142,247,142,0.03)); color: #eaf6ff; border-left:4px solid var(--accent); padding-left:12px }
       .nav a.active .icon { transform: scale(1.05); }
+      /* Office virtualization dropdown in sidebar */
+      .nav .nav-dropdown { list-style:none; margin:6px 0 0 0; padding:6px 6px; display:none }
+      .nav .nav-dropdown li { margin:6px 0 }
+      .nav .nav-dropdown a { padding:8px 10px; display:flex; gap:8px; border-radius:6px }
+      .nav .nav-dropdown-toggle { display:flex; gap:10px; align-items:center; width:100%; padding:8px; border-radius:6px; background:transparent; color:inherit; border: none; cursor:pointer }
+      .nav .nav-dropdown-toggle[aria-expanded="true"] { background: rgba(255,255,255,0.03) }
       table { border-collapse: collapse; width: 100%; background:var(--card); color:var(--muted) }
       th, td { text-align: left; padding: 8px; }
       th { background: rgba(255,255,255,0.04); color:#d7e9fb }
@@ -102,6 +108,23 @@
           <li><a href="/dashboard" class="<%= 'active' if request.path_info == '/' || request.path_info.start_with?('/dashboard') %>"><span class="icon">🏠</span><span>Dashboard</span></a></li>
           <li><a href="/equipments" class="<%= 'active' if request.path_info.start_with?('/equipments') %>"><span class="icon">📦</span><span>Inventory</span></a></li>
           <li>
+            <% begin
+                 locations = Equipment.distinct.pluck(:location).compact.map(&:to_s).map(&:strip).reject(&:empty?).uniq.sort
+               rescue => _e
+                 locations = []
+               end %>
+            <button class="nav-dropdown-toggle" aria-expanded="false" aria-controls="officeDropdown"><span class="icon">🏢</span><span>Office virtualization</span></button>
+            <ul id="officeDropdown" class="nav-dropdown" role="menu" aria-hidden="true">
+              <% if locations.empty? %>
+                <li class="muted" style="padding:6px 10px;color:var(--muted)">No offices found</li>
+              <% else %>
+                <% locations.each do |loc| %>
+                  <li role="none"><a role="menuitem" href="/equipments?location=<%= URI.encode(loc) %>"><span class="icon">📍</span><span><%= h loc %></span></a></li>
+                <% end %>
+              <% end %>
+            </ul>
+          </li>
+          <li>
             <a href="/requests" class="<%= 'active' if request.path_info.start_with?('/requests') %>"><span class="icon">📝</span><span>Requests / Lending</span>
               <% if defined?(@pending_requests_count) && @pending_requests_count.to_i > 0 %>
                 <span style="background:var(--danger);color:#0f1720;padding:2px 6px;border-radius:10px;margin-left:8px;font-size:0.8rem"><%= @pending_requests_count %></span>
@@ -166,6 +189,36 @@
         window.addEventListener('resize', updateBtnVisibility);
         btn.addEventListener('click', function(){ if(sidebar.classList.contains('open')) closeSidebar(); else openSidebar(); });
       })();
+        // Office virtualization dropdown toggle (accessible)
+        (function(){
+          function closeAllOfficeDropdowns(){ document.querySelectorAll('.nav-dropdown').forEach(function(d){ d.style.display='none'; d.setAttribute('aria-hidden','true'); }); document.querySelectorAll('.nav-dropdown-toggle').forEach(function(b){ b.setAttribute('aria-expanded','false'); }); }
+          document.addEventListener('click', function(ev){
+            var btn = ev.target.closest && ev.target.closest('.nav-dropdown-toggle');
+            if(btn){
+              ev.preventDefault();
+              var id = btn.getAttribute('aria-controls');
+              var list = id ? document.getElementById(id) : btn.nextElementSibling;
+              if(!list) return;
+              var expanded = btn.getAttribute('aria-expanded') === 'true';
+              if(expanded){ list.style.display = 'none'; list.setAttribute('aria-hidden','true'); btn.setAttribute('aria-expanded','false'); }
+              else { closeAllOfficeDropdowns(); list.style.display = 'block'; list.setAttribute('aria-hidden','false'); btn.setAttribute('aria-expanded','true'); }
+              return;
+            }
+            // click outside: close dropdowns
+            if(!ev.target.closest || !ev.target.closest('.nav')){
+              closeAllOfficeDropdowns();
+            }
+          });
+          document.addEventListener('keydown', function(ev){
+            if(ev.key === 'Escape') closeAllOfficeDropdowns();
+            if(ev.key === 'Enter' || ev.key === ' '){
+              var active = document.activeElement;
+              if(active && active.classList && active.classList.contains('nav-dropdown-toggle')){
+                ev.preventDefault(); active.click();
+              }
+            }
+          });
+        })();
     </script>
         <!-- Global confirmation modal (used by forms/links with `data-confirm`) -->
         <div id="globalConfirmModal" style="display:none; position:fixed; inset:0; align-items:center; justify-content:center; z-index:4000">
