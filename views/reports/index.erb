@@ -1,58 +1,254 @@
-<div class="form-card">
+<div class="form-card reports-container">
   <h1>Reports & Analytics</h1>
   <div style="margin-top:8px; color:var(--muted)">Choose a report and apply filters (From / To dates or Year).</div>
 
-  <form id="reports_filter" method="get" action="/reports" style="display:flex;gap:8px;align-items:center;margin-top:12px">
-    <label style="font-size:0.9rem; color:var(--muted)">From</label>
+  <form id="reports_filter" method="get" action="/reports" class="reports-filter">
+    <label>From</label>
     <input type="date" name="from" value="<%= params['from'] %>">
-    <label style="font-size:0.9rem; color:var(--muted)">To</label>
+    <label>To</label>
     <input type="date" name="to" value="<%= params['to'] %>">
-    <label style="font-size:0.9rem; color:var(--muted)">Year</label>
+    <label>Year</label>
     <input type="number" name="year" min="2000" max="<%= Date.today.year+1 %>" value="<%= params['year'] %>" style="width:110px">
     <button class="btn-primary" type="submit">Apply</button>
-    <a class="btn-secondary" href="/reports" style="margin-left:6px">Reset</a>
+    <a class="btn-secondary" href="/reports">Reset</a>
   </form>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
-    <div class="card">
-      <h3>Deployed by Category</h3>
-      <p class="muted">Counts of deployed units grouped by category</p>
-      <a href="/reports/deployed_by_category?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>">View Report</a>
-    </div>
-    <div class="card">
-      <h3>Top Assignees</h3>
-      <p class="muted">Users with the most assigned items</p>
-      <a href="/reports/top_assignees?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>">View Report</a>
-    </div>
-    <div class="card">
-      <h3>Average Deployment Duration</h3>
-      <p class="muted">Average time assets remain deployed before return</p>
-      <a href="/reports/avg_deployment_duration?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>">View Report</a>
-    </div>
-    <div class="card">
-      <h3>Warranty Expiring</h3>
-      <p class="muted">Equipment with warranty expiring within given window</p>
-      <a href="/reports/warranty_expiring?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>">View Report</a>
-    </div>
-    <div class="card">
-      <h3>Status Over Time</h3>
-      <p class="muted">Track status changes (maintenance, damaged, etc.)</p>
-      <a href="/reports/status_over_time?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>">View Report</a>
-    </div>
-    <div class="card">
-      <h3>Assets by Location</h3>
-      <p class="muted">Distribution of assets per office/location</p>
-      <a href="/reports/assets_by_location?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>">View Report</a>
-    </div>
-    <div class="card">
-      <h3>Interactive Analytics</h3>
-      <p class="muted">Three filterable graphs for quick insights</p>
-      <a href="/reports/analytics?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>">Open Analytics</a>
-    </div>
-    <div class="card">
-      <h3>Top Problematic Equipment</h3>
-      <p class="muted">Equipment most frequently reported as damaged or under repair</p>
-      <a href="/reports/top_problem_equipment?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>">View Report</a>
-    </div>
+  <div class="reports-grid" role="list">
+    <article class="report-card" role="listitem">
+      <div class="report-meta">
+        <div class="report-thumb thumb-deployed" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 13h4v6H3zM9 9h4v10H9zM15 5h4v14h-4z" fill="#062017"/></svg>
+        </div>
+        <div>
+          <h3>Deployed by Category</h3>
+          <p class="muted">Counts of deployed units grouped by category</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a class="report-icon" href="/reports/deployed_by_category?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>" title="Open report">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11 3v18M3 11h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="report-link" href="/reports/deployed_by_category?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>&preview=1">Preview</a>
+      </div>
+      <% if params['preview'] && params['preview'].to_s == '1' %>
+        <div class="report-preview">
+          <% if @deployed_preview && @deployed_preview.any? %>
+            <div>Top categories</div>
+            <ul>
+              <% @deployed_preview.each do |r| %>
+                <li><%= r[:name] %> — <strong><%= r[:value] %></strong></li>
+              <% end %>
+            </ul>
+          <% else %>
+            <div>No preview data</div>
+          <% end %>
+        </div>
+      <% end %>
+    </article>
+
+    <article class="report-card" role="listitem">
+      <div class="report-meta">
+        <div class="report-thumb thumb-assignees" aria-hidden="true">
+          <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><g fill="#062017"><circle cx="24" cy="14" r="6"/><path d="M8 40c2-8 14-12 16-12s14 4 16 12H8z"/></g></svg>
+        </div>
+        <div>
+          <h3>Top Assignees</h3>
+          <p class="muted">Users with the most assigned items</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a class="report-icon" href="/reports/top_assignees?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>" title="Open report">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 6h18M8 6v12M16 6v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="report-link" href="/reports/top_assignees?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>&preview=1">Preview</a>
+      </div>
+      <% if params['preview'] && params['preview'].to_s == '1' %>
+        <div class="report-preview">
+          <% if @assignees_preview && @assignees_preview.any? %>
+            <div>Top assignees</div>
+            <ul>
+              <% @assignees_preview.each do |r| %>
+                <li><%= r[:name] %> — <strong><%= r[:value] %></strong></li>
+              <% end %>
+            </ul>
+          <% else %>
+            <div>No preview data</div>
+          <% end %>
+        </div>
+      <% end %>
+    </article>
+
+    <article class="report-card" role="listitem">
+      <div class="report-meta">
+        <div class="report-thumb thumb-duration" aria-hidden="true">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="#062017"><circle cx="32" cy="32" r="30" opacity="0.05"/><path d="M32 18v14l12 6"/></g></svg>
+        </div>
+        <div>
+          <h3>Average Deployment Duration</h3>
+          <p class="muted">Average time assets remain deployed before return</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a class="report-icon" href="/reports/avg_deployment_duration?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>" title="Open report">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2v20M2 12h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="report-link" href="/reports/avg_deployment_duration?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>&preview=1">Preview</a>
+      </div>
+      <% if params['preview'] && params['preview'].to_s == '1' %>
+        <div class="report-preview">
+          <% if @avg_duration_preview %>
+            <div>Average duration: <strong><%= @avg_duration_preview %></strong> days</div>
+          <% else %>
+            <div>No preview data</div>
+          <% end %>
+        </div>
+      <% end %>
+    </article>
+
+    <article class="report-card" role="listitem">
+      <div class="report-meta">
+        <div class="report-thumb thumb-warranty" aria-hidden="true">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><g fill="#062017"><path d="M32 6l6 14 14 1-10 8L46 50 32 42 18 50l4-21L12 21l14-1z"/></g></svg>
+        </div>
+        <div>
+          <h3>Warranty Expiring</h3>
+          <p class="muted">Equipment with warranty expiring within given window</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a class="report-icon" href="/reports/warranty_expiring?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>" title="Open report">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 6h18M12 6v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="report-link" href="/reports/warranty_expiring?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>&preview=1">Preview</a>
+      </div>
+      <% if params['preview'] && params['preview'].to_s == '1' %>
+        <div class="report-preview">
+          <% if @warranty_preview && @warranty_preview.any? %>
+            <div>Expiring soon</div>
+            <ul>
+              <% @warranty_preview.each do |r| %>
+                <li><%= r[:name] %> — <%= r[:expires] %></li>
+              <% end %>
+            </ul>
+          <% else %>
+            <div>No preview data</div>
+          <% end %>
+        </div>
+      <% end %>
+    </article>
+
+    <article class="report-card" role="listitem">
+      <div class="report-meta">
+        <div class="report-thumb thumb-status" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 12h4v6H4zM10 8h4v10h-4zM16 4h4v14h-4z" fill="#062017"/></svg>
+        </div>
+        <div>
+          <h3>Status Over Time</h3>
+          <p class="muted">Track status changes (maintenance, damaged, etc.)</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a class="report-icon" href="/reports/status_over_time?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>" title="Open report">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 12h18M12 3v18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="report-link" href="/reports/status_over_time?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>&preview=1">Preview</a>
+      </div>
+      <% if params['preview'] && params['preview'].to_s == '1' %>
+        <div class="report-preview">
+          <% if @location_preview && @location_preview.any? %>
+            <div>Top locations</div>
+            <ul>
+              <% @location_preview.each do |r| %>
+                <li><%= r[:name] %> — <strong><%= r[:value] %></strong></li>
+              <% end %>
+            </ul>
+          <% else %>
+            <div>No preview data</div>
+          <% end %>
+        </div>
+      <% end %>
+    </article>
+
+    <article class="report-card" role="listitem">
+      <div class="report-meta">
+        <div class="report-thumb thumb-location" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l4 7h-8l4-7zM12 22v-8" stroke="#062017" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <h3>Assets by Location</h3>
+          <p class="muted">Distribution of assets per office/location</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a class="report-icon" href="/reports/assets_by_location?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>" title="Open report">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 6h18M3 18h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="report-link" href="/reports/assets_by_location?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>&preview=1">Preview</a>
+      </div>
+      <% if params['preview'] && params['preview'].to_s == '1' %>
+        <div class="report-preview">
+          <% if @deployed_preview && @deployed_preview.any? %>
+            <div>Example: deployed by category</div>
+            <ul>
+              <% @deployed_preview.each do |r| %>
+                <li><%= r[:name] %> — <strong><%= r[:value] %></strong></li>
+              <% end %>
+            </ul>
+          <% else %>
+            <div>No preview data</div>
+          <% end %>
+        </div>
+      <% end %>
+    </article>
+
+    <article class="report-card" role="listitem">
+      <div class="report-meta">
+        <div class="report-thumb thumb-analytics" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 12h3v6H3zM9 8h3v10H9zM15 4h3v14h-3z" fill="#062017"/></svg>
+        </div>
+        <div>
+          <h3>Interactive Analytics</h3>
+          <p class="muted">Three filterable graphs for quick insights</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a class="report-icon" href="/reports/analytics?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>" title="Open analytics">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 12h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="report-link" href="/reports/analytics?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>&preview=1">Preview</a>
+      </div>
+    </article>
+
+    <article class="report-card" role="listitem">
+      <div class="report-meta">
+        <div class="report-thumb thumb-problem" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l1.8 5.4L19 9l-4 3 1.2 5.6L12 15l-4.2 2.6L9 12 5 9l5.2-1.6L12 2z" fill="#062017"/></svg>
+        </div>
+        <div>
+          <h3>Top Problematic Equipment</h3>
+          <p class="muted">Equipment most frequently reported as damaged or under repair</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a class="report-icon" href="/reports/top_problem_equipment?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>" title="Open report">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 6h18M3 18h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="report-link" href="/reports/top_problem_equipment?from=<%= params['from'] %>&to=<%= params['to'] %>&year=<%= params['year'] %>&preview=1">Preview</a>
+      </div>
+      <% if params['preview'] && params['preview'].to_s == '1' %>
+        <div class="report-preview">
+          <% if @problem_preview && @problem_preview.any? %>
+            <div>Recent problem items</div>
+            <ul>
+              <% @problem_preview.each do |r| %>
+                <li><%= r[:name] %> — <em><%= r[:status] %></em></li>
+              <% end %>
+            </ul>
+          <% else %>
+            <div>No preview data</div>
+          <% end %>
+        </div>
+      <% end %>
+    </article>
   </div>
 </div>

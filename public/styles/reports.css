@@ -1,0 +1,34 @@
+:root{--card:#0f1720;--muted:#9aa6b2;--accent:#6ad1ff}
+.reports-container{padding:12px}
+.reports-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:16px}
+.report-card{background:var(--card);border-radius:10px;padding:14px;border:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;gap:12px}
+.report-card h3{margin:0;font-size:1.05rem}
+.report-card .muted{margin:0;color:var(--muted);font-size:0.95rem}
+.report-meta{display:flex;align-items:center;gap:12px}
+.report-thumb{width:56px;height:56px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#062017;font-weight:700;flex:0 0 56px}
+.report-thumb svg{width:28px;height:28px}
+.report-cta{margin-top:6px;align-self:flex-start;padding:8px 12px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--accent);text-decoration:none;font-weight:600}
+.report-icon{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);color:var(--accent);text-decoration:none}
+.report-link{color:var(--muted);font-size:0.9rem;text-decoration:underline;margin-left:8px}
+.report-card:focus-within,.report-card:hover{box-shadow:0 6px 18px rgba(0,0,0,0.45);transform:translateY(-2px)}
+@media(max-width:900px){.reports-grid{grid-template-columns:1fr}}
+@media(min-width:1200px){.reports-grid{grid-template-columns:repeat(3,1fr)}}
+/* per-card accents */
+.thumb-deployed{background:linear-gradient(180deg,#e0f7ff,#ccebff)}
+.thumb-assignees{background:linear-gradient(180deg,#e9ffd6,#d6ffbf)}
+.thumb-duration{background:linear-gradient(180deg,#fff2cc,#ffe6a8)}
+.thumb-warranty{background:linear-gradient(180deg,#ffe6e6,#ffd6d6)}
+.thumb-status{background:linear-gradient(180deg,#f3e9ff,#e7d9ff)}
+.thumb-location{background:linear-gradient(180deg,#e6f7ff,#d6f0ff)}
+.thumb-analytics{background:linear-gradient(180deg,#f0f8ff,#dff3ff)}
+.thumb-problem{background:linear-gradient(180deg,#ffecec,#ffdada)}
+
+/* Form filter styles for reports page */
+.reports-filter{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.reports-filter label{font-size:0.9rem;color:var(--muted);margin-right:6px}
+.reports-filter input[type="date"],.reports-filter input[type="number"]{padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--muted)}
+.reports-filter .btn-primary{padding:8px 12px}
+.reports-filter .btn-secondary{margin-left:6px}
+.report-preview{margin-top:8px;color:var(--muted);font-size:0.9rem}
+.report-preview ul{margin:6px 0 0 16px}
+.report-preview li{margin:4px 0}

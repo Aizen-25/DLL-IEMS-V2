@@ -927,6 +927,63 @@ end
 
 get '/reports' do
   # the reports index will render available reports and a filter
+  # If preview=1 is present, prepare small preview snippets for each card
+  if params['preview'] && params['preview'].to_s == '1'
+    from, to = parse_date_range(params)
+    # Deployed by category preview: top 3 categories
+    begin
+      ds = Request.where(status: 'approved')
+      ds = ds.where('approved_at >= ?', from.beginning_of_day) if from
+      ds = ds.where('approved_at <= ?', to.end_of_day) if to
+      raw = ds.joins(:equipment).group('equipments.category').sum(:quantity)
+      @deployed_preview = raw.sort_by { |_,v| -v }.first(3).map { |k,v| { name: (k||'Uncategorized'), value: v } }
+    rescue => _e
+      @deployed_preview = []
+    end
+
+    # Top assignees preview: top 3 users by approved requests
+    begin
+      ta = Request.where(status: 'approved').joins(:user).group('users.id','users.name').sum(:quantity)
+      @assignees_preview = ta.sort_by { |_,v| -v }.first(3).map { |(uid,name),v| { name: (name || 'Unknown'), value: v } }
+    rescue => _e
+      @assignees_preview = []
+    end
+
+    # Average deployment duration preview: compute average days for completed requests
+    begin
+      durations = Request.where.not(approved_at: nil).where.not(returned_at: nil).pluck(Arel.sql("julianday(returned_at) - julianday(approved_at)"))
+      avg = durations.compact.map(&:to_f).reject { |d| d.nan? }.then { |arr| arr.any? ? (arr.sum / arr.size) : nil }
+      @avg_duration_preview = avg ? (avg.round(1)) : nil
+    rescue => _e
+      @avg_duration_preview = nil
+    end
+
+    # Warranty expiring preview: count expiring within 90 days
+    begin
+      today = Date.today
+      cutoff = today + 90
+      wp = Equipment.where.not(warranty_expires_at: nil).where('warranty_expires_at BETWEEN ? AND ?', today, cutoff).limit(3)
+      @warranty_preview = wp.map { |e| { name: e.name || e.model || e.serial_number, expires: e.warranty_expires_at } }
+    rescue => _e
+      @warranty_preview = []
+    end
+
+    # Assets by location preview: top 3 locations
+    begin
+      locs = Equipment.group(:location).sum(:quantity)
+      @location_preview = locs.sort_by { |_,v| -v }.first(3).map { |k,v| { name: (k || 'Unspecified'), value: v } }
+    rescue => _e
+      @location_preview = []
+    end
+
+    # Top problematic equipment preview: equipments with status maintenance/damaged
+    begin
+      @problem_preview = Equipment.where(status: ['maintenance','damaged']).order(updated_at: :desc).limit(3).map { |e| { name: e.name || e.model || e.serial_number, status: e.status } }
+    rescue => _e
+      @problem_preview = []
+    end
+  end
+
   erb :'reports/index'
 end
 

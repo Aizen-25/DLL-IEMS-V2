@@ -32,6 +32,9 @@
         #sidebarToggle { display:inline-block }
       }
       #sidebarToggle { display:none; cursor:pointer }
+      /* Active nav item highlight */
+      .nav a.active { background: linear-gradient(90deg, rgba(106,209,255,0.06), rgba(142,247,142,0.03)); color: #eaf6ff; border-left:4px solid var(--accent); padding-left:12px }
+      .nav a.active .icon { transform: scale(1.05); }
       table { border-collapse: collapse; width: 100%; background:var(--card); color:var(--muted) }
       th, td { text-align: left; padding: 8px; }
       th { background: rgba(255,255,255,0.04); color:#d7e9fb }
@@ -89,16 +92,17 @@
         .form-grid { grid-template-columns: 1fr }
       }
     </style>
+    <link rel="stylesheet" href="/styles/reports.css">
   </head>
   <body>
     <div class="app">
       <aside class="sidebar">
         <h2>IT Inventory</h2>
           <ul class="nav">
-          <li><a href="/dashboard"><span class="icon">🏠</span><span>Dashboard</span></a></li>
-          <li><a href="/equipments"><span class="icon">📦</span><span>Inventory</span></a></li>
+          <li><a href="/dashboard" class="<%= 'active' if request.path_info == '/' || request.path_info.start_with?('/dashboard') %>"><span class="icon">🏠</span><span>Dashboard</span></a></li>
+          <li><a href="/equipments" class="<%= 'active' if request.path_info.start_with?('/equipments') %>"><span class="icon">📦</span><span>Inventory</span></a></li>
           <li>
-            <a href="/requests"><span class="icon">📝</span><span>Requests / Lending</span>
+            <a href="/requests" class="<%= 'active' if request.path_info.start_with?('/requests') %>"><span class="icon">📝</span><span>Requests / Lending</span>
               <% if defined?(@pending_requests_count) && @pending_requests_count.to_i > 0 %>
                 <span style="background:var(--danger);color:#0f1720;padding:2px 6px;border-radius:10px;margin-left:8px;font-size:0.8rem"><%= @pending_requests_count %></span>
               <% end %>
@@ -108,20 +112,21 @@
             </a>
           </li>
           <% if current_user && (current_user.semi_admin? || current_user.super_admin?) %>
-            <li><a href="/deploy"><span class="icon">🚚</span><span>Deploy</span></a></li>
+            <li><a href="/deploy" class="<%= 'active' if request.path_info.start_with?('/deploy') %>"><span class="icon">🚚</span><span>Deploy</span></a></li>
           <% end %>
           <% if current_user && current_user.super_admin? %>
-            <li><a href="/users"><span class="icon">👥</span><span>Users & Departments</span></a></li>
+            <li><a href="/users" class="<%= 'active' if request.path_info.start_with?('/users') %>"><span class="icon">👥</span><span>Users & Departments</span></a></li>
           <% end %>
           <% if current_user && current_user.super_admin? %>
-            <li><a href="/equipment_histories"><span class="icon">🧾</span><span>Equipment History / Tracks</span></a></li>
+            <li><a href="/equipment_histories" class="<%= 'active' if request.path_info.start_with?('/equipment_histories') %>"><span class="icon">🧾</span><span>Equipment History / Tracks</span></a></li>
           <% end %>
-          <li><a href="/reports"><span class="icon">📄</span><span>Reports</span></a></li>
-          <li><a href="/reports/analytics"><span class="icon">📊</span><span>Analytics</span></a></li>
+          <li><a href="/reports" class="<%= 'active' if (request.path_info == '/reports') || (request.path_info.start_with?('/reports') && !request.path_info.start_with?('/reports/analytics')) %>"><span class="icon">📄</span><span>Reports</span></a></li>
+          <li><a href="/reports/analytics" class="<%= 'active' if request.path_info.start_with?('/reports/analytics') %>"><span class="icon">📊</span><span>Analytics</span></a></li>
           <li><a href="/repairs"><span class="icon">🔧</span><span>Equipment Repair</span></a></li>
-          <li><a href="/settings"><span class="icon">⚙️</span><span>Settings</span></a></li>
+          <li><a href="/repairs" class="<%= 'active' if request.path_info.start_with?('/repairs') %>"><span class="icon">🔧</span><span>Equipment Repair</span></a></li>
+          <li><a href="/settings" class="<%= 'active' if request.path_info.start_with?('/settings') %>"><span class="icon">⚙️</span><span>Settings</span></a></li>
           <% if current_user && current_user.super_admin? %>
-            <li><a href="/database_manage"><span class="icon">🗄️</span><span>Database Manage</span></a></li>
+            <li><a href="/database_manage" class="<%= 'active' if request.path_info.start_with?('/database_manage') %>"><span class="icon">🗄️</span><span>Database Manage</span></a></li>
           <% end %>
         </ul>
         
