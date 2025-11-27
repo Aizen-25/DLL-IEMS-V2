@@ -15,6 +15,7 @@ require 'zlib'
 require 'open3'
 require 'tmpdir'
 require 'yaml'
+require 'net/http'
 require_relative 'models/equipment'
 require_relative 'models/request'
 require_relative 'models/activity'
@@ -219,6 +220,33 @@ Thread.new do
       STDERR.puts "Legacy export checker failed: #{e.message}"
     end
     sleep 60 * 60 * 24
+  end
+end
+
+# Background keep-alive pinger to prevent Render from sleeping.
+# Interval: 14 minutes 50 seconds (890s). Uses ENV['KEEP_ALIVE_URL'] if set,
+# otherwise falls back to RENDER_EXTERNAL_URL or localhost with ENV['PORT'] or 4567.
+if ENV['KEEP_ALIVE_DISABLE'].to_s.strip == ''
+  Thread.new do
+    begin
+      interval = 14 * 60 + 50 # 890 seconds
+      url_string = ENV['KEEP_ALIVE_URL'] || ENV['RENDER_EXTERNAL_URL'] || "http://localhost:#{ENV['PORT'] || 4567}/health"
+      uri = URI.parse(url_string)
+      loop do
+        begin
+          Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |http|
+            req = Net::HTTP::Get.new(uri.request_uri)
+            res = http.request(req)
+            STDERR.puts "[keep-alive] pinged #{uri} -> #{res.code} #{res.message} at #{Time.now.utc}"
+          end
+        rescue => e
+          STDERR.puts "[keep-alive] error pinging #{uri}: #{e.class} - #{e.message}"
+        end
+        sleep interval
+      end
+    rescue => e
+      STDERR.puts "[keep-alive] pinger crashed: #{e.class} - #{e.message}"
+    end
   end
 end
 
