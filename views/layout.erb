@@ -140,7 +140,7 @@
                   <li class="muted" style="padding:6px 10px;color:var(--muted)">No offices found</li>
                 <% else %>
                   <% locations.each do |loc| %>
-                    <li role="none"><a role="menuitem" href="/equipments?location=<%= CGI.escape(loc.to_s) %>"><span class="icon">📍</span><span><%= h loc %></span></a></li>
+                    <li role="none"><a role="menuitem" href="/deploy/office/<%= CGI.escape(loc.to_s) %>/map"><span class="icon">📍</span><span><%= h loc %></span></a></li>
                   <% end %>
                 <% end %>
             </ul>
