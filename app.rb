@@ -1769,6 +1769,7 @@ get '/database_manage' do
   end
   @auto_export_file = cfg['auto_exported_file']
   @exports = Dir.glob(File.join(LEGACY_EXPORT_DIR, '*.json')).map { |p| File.basename(p) }.sort.reverse
+  @auto_export_upload_error = cfg['auto_export_upload_error']
 
   erb :'database_manage/index'
 end

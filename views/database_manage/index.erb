@@ -28,6 +28,12 @@
         <a href="/database_manage/download/<%= URI::DEFAULT_PARSER.escape(@auto_export_file) %>"><%= h @auto_export_file %></a>
       </div>
     <% end %>
+    <% if @auto_export_upload_error && !@auto_export_upload_error.to_s.strip.empty? %>
+      <div style="margin-top:12px; background:rgba(255,80,80,0.04); padding:10px; border-radius:6px;">
+        <strong style="color:#ffb3b3">Upload error (last attempt):</strong>
+        <pre style="white-space:pre-wrap; word-break:break-word; color:var(--muted); margin-top:6px; font-size:0.9rem;"><%= h @auto_export_upload_error %></pre>
+      </div>
+    <% end %>
     <% if @exports && @exports.any? %>
       <div style="margin-top:8px">
         <strong>Available exports:</strong>
