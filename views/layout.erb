@@ -112,10 +112,28 @@
           <li><a href="/equipments" class="<%= 'active' if request.path_info.start_with?('/equipments') %>"><span class="icon">📦</span><span>Inventory</span></a></li>
           <li>
             <% begin
-                 locations = Equipment.distinct.pluck(:location).compact.map(&:to_s).map(&:strip).reject(&:empty?).uniq.sort
-               rescue => _e
-                 locations = []
-               end %>
+                   # Collect offices from equipments (explicit location column)
+                   locations = []
+                   begin
+                     locations += Equipment.distinct.pluck(:location).compact.map(&:to_s).map(&:strip)
+                   rescue => _e2
+                   end
+
+                   # Also include offices mentioned in request notes (e.g. 'Deployed to Office Name')
+                   begin
+                     Request.where.not(notes: [nil, '']).pluck(:notes).each do |note|
+                       if note && note.include?('Deployed to')
+                         m = note.match(/Deployed to ([^;\n]+)/)
+                         locations << m[1].to_s.strip if m
+                       end
+                     end
+                   rescue => _e3
+                   end
+
+                   locations = locations.map(&:to_s).map(&:strip).reject(&:empty?).uniq.sort
+                 rescue => _e
+                   locations = []
+                 end %>
             <button class="nav-dropdown-toggle" aria-expanded="false" aria-controls="officeDropdown"><span class="icon">🏢</span><span>Office virtualization</span></button>
             <ul id="officeDropdown" class="nav-dropdown" role="menu" aria-hidden="true">
               <% if locations.empty? %>
@@ -148,7 +166,6 @@
           <% end %>
           <li><a href="/reports" class="<%= 'active' if (request.path_info == '/reports') || (request.path_info.start_with?('/reports') && !request.path_info.start_with?('/reports/analytics')) %>"><span class="icon">📄</span><span>Reports</span></a></li>
           <li><a href="/reports/analytics" class="<%= 'active' if request.path_info.start_with?('/reports/analytics') %>"><span class="icon">📊</span><span>Analytics</span></a></li>
-          <li><a href="/repairs"><span class="icon">🔧</span><span>Equipment Repair</span></a></li>
           <li><a href="/repairs" class="<%= 'active' if request.path_info.start_with?('/repairs') %>"><span class="icon">🔧</span><span>Equipment Repair</span></a></li>
           <li><a href="/settings" class="<%= 'active' if request.path_info.start_with?('/settings') %>"><span class="icon">⚙️</span><span>Settings</span></a></li>
           <% if current_user && current_user.super_admin? %>
@@ -174,6 +191,15 @@
             <div class="muted">&nbsp;</div>
           </div>
 
+          <% if session[:flash] && session[:flash].any? %>
+            <% f = session.delete(:flash) %>
+            <% if f['notice'] || f[:notice] %>
+              <div class="flash"><%= (f['notice'] || f[:notice]) %></div>
+            <% end %>
+            <% if f['error'] || f[:error] %>
+              <div class="flash" style="background: linear-gradient(90deg, rgba(255,120,120,0.08), rgba(255,180,180,0.04)); color:#ffdede"><%= (f['error'] || f[:error]) %></div>
+            <% end %>
+          <% end %>
           <%= yield %>
         </div>
       </main>
@@ -275,7 +301,7 @@
                 }catch(e){}
                 ev.preventDefault();
                 var msg = f.getAttribute('data-confirm') || 'Are you sure?';
-                openConfirm(msg, function(){ try{ f.dataset.skipConfirm = '1'; }catch(e){}; f.submit(); });
+                openConfirm(msg, function(){ try{ f.dataset.skipConfirm = '1'; }catch(e){}; if(typeof f.requestSubmit === 'function'){ try{ f.requestSubmit(); }catch(e){ f.submit(); } } else { f.submit(); } });
               }
             }, true);
 
@@ -287,10 +313,10 @@
               if(t.tagName === 'FORM') return;
               ev.preventDefault();
               var msg = t.getAttribute('data-confirm') || 'Are you sure?';
-              openConfirm(msg, function(){
+                openConfirm(msg, function(){
                 // If the element is inside a form, submit that form (use skip flag)
                 var f = t.closest('form');
-                if(f){ try{ f.dataset.skipConfirm = '1'; }catch(e){}; return f.submit(); }
+                if(f){ try{ f.dataset.skipConfirm = '1'; }catch(e){}; if(typeof f.requestSubmit === 'function'){ try{ return f.requestSubmit(); }catch(e){ return f.submit(); } } return f.submit(); }
                 // If it's a link, follow href. If it declares a data-method (non-GET), create and submit a form
                 if(t.tagName === 'A' && t.href){
                   var method = (t.getAttribute('data-method') || 'get').toLowerCase();

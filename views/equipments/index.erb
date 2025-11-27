@@ -113,7 +113,7 @@
       <tbody>
         <% if @equipments.any? %>
         <% @equipments.each do |e| %>
-          <tr>
+          <tr data-category="<%= h(e.category || '') %>">
             <td><%= e.serial_number %></td>
             <td>
               <a class="asset-link equipment-history-link" href="/equipments/<%= e.id %>" data-eid="<%= e.id %>"><%= e.name %></a>
@@ -391,11 +391,15 @@
       var status = $('#filter-status').val();
       var location = $('#filter-location').val();
       var name = data[1] || '';
-      var rowStatus = data[2] || '';
-      var rowLocation = data[3] || '';
+      // Use the rendered row node to extract visible text (strip HTML)
+      var rowNode = table.row(dataIndex).node();
+      var rowStatus = rowNode ? $(rowNode).find('td').eq(2).text().trim() : (data[2] || '');
+      var rowLocation = rowNode ? $(rowNode).find('td').eq(3).text().trim() : (data[3] || '');
 
       if(categories.length){
-        var matched = categories.some(function(c){ return name.indexOf(c) !== -1 });
+        var rowNode = table.row(dataIndex).node();
+        var rowCategory = rowNode ? $(rowNode).data('category') || '' : '';
+        var matched = categories.some(function(c){ return rowCategory === c });
         if(!matched) return false;
       }
       if(status && rowStatus.toLowerCase() !== status.toLowerCase()) return false;

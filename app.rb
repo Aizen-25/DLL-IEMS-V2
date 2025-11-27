@@ -23,7 +23,6 @@ require_relative 'models/activity'
 require_relative 'models/user'
 require_relative 'models/user_equipment'
 require_relative 'models/equipment_history'
-require_relative 'models/legacy_export'
 set :database_file, 'config/database.yml'
 
 # If a DATABASE_URL is provided (Render/Postgres), prefer it for ActiveRecord
@@ -41,6 +40,8 @@ set :port, ENV.fetch('PORT', 4567).to_i
 
 # Enable sessions for login
 enable :sessions
+# Allow HTML forms to simulate PUT/DELETE via the `_method` hidden field
+enable :method_override
 # Ensure SESSION_SECRET is present and at least 64 bytes long.
 # Rack/session requires a sufficiently long secret; fail-fast with a clear
 # message so the deploy logs show the problem instead of obscure runtime errors.
@@ -140,14 +141,7 @@ def perform_auto_export(prefix = 'auto_export')
     rescue => _e
     end
 
-    # Persist the same metadata into DB (single-row LegacyExport) for robust scheduling
-    begin
-      rec = LegacyExport.first_or_create
-      rec.auto_exported_file = File.basename(src)
-      rec.auto_exported_at = Time.now.utc
-      rec.save
-    rescue => _e
-    end
+    # (Keep legacy YAML metadata only)
 
     # Attempt to upload the raw JSON to GitHub backup repo if configured
     if ENV['GITHUB_TOKEN'] && ENV['GITHUB_REPO']
@@ -193,16 +187,7 @@ def perform_auto_export(prefix = 'auto_export')
       cfg['auto_export_upload_logs'] = (cfg['auto_export_upload_logs'] || []) + new_logs
       cfg['auto_export_upload_error'] = upload_msg unless uploaded
       write_legacy_config(cfg)
-      # Persist into DB as well
-      rec = LegacyExport.first_or_create
-      rec.auto_export_upload_logs = ((rec.auto_export_upload_logs || '') + "\n" + new_logs.join("\n")).strip
-      rec.auto_export_upload_error = upload_msg unless uploaded.nil?
-      if uploaded
-        rec.uploaded_to_repo = cfg['uploaded_to_repo'] if cfg['uploaded_to_repo']
-        rec.uploaded_at = Time.now.utc
-        rec.uploaded_file = cfg['uploaded_file'] if cfg['uploaded_file']
-      end
-      rec.save
+      # (Do not persist upload logs into DB here; YAML-only fallback retained)
     rescue => _e
     end
 
@@ -213,38 +198,36 @@ def perform_auto_export(prefix = 'auto_export')
 end
 
 def check_and_trigger_auto_export
-  # Prefer the DB-backed LegacyExport record for scheduling; fall back to YAML
-  rec = LegacyExport.first
   cfg = read_legacy_config
-  expiry = rec&.expiry_date || cfg['expiry_date']
-  exported = rec&.auto_exported_file || cfg['auto_exported_file']
+  expiry = cfg['expiry_date']
+  exported = cfg['auto_exported_file']
   return unless expiry
   begin
-    expiry_date = expiry.is_a?(String) ? Date.parse(expiry.to_s) : expiry
+    expiry_date = Date.parse(expiry.to_s)
   rescue
     return
   end
 
   today = Date.today
-  # Trigger automatic export one day before the expiry date
+  # Trigger automatic export one day before the expiry date (so it runs earlier)
+  # To be safe, record when we attempted an auto-export and avoid retrying more
+  # than once per day. We store `auto_export_attempted_on` in the legacy YAML.
   trigger_date = expiry_date - 1
   if today >= trigger_date && exported.to_s.strip.empty?
-    ok, msg = perform_auto_export('auto_export')
-    unless ok
-      STDERR.puts "Auto export on expiry failed: #{msg}"
+    attempted_on = cfg['auto_export_attempted_on']
+    if attempted_on == today.to_s
+      # already attempted today -- skip to avoid repeated attempts
     else
-      # After successful trigger, set new expiry = trigger_run_date + 28 days
       begin
-        rec = LegacyExport.first_or_create
-        # try to extract filename from perform_auto_export message
-        if msg && msg.to_s =~ /Automatic backup created: (\S+)/
-          rec.auto_exported_file = File.basename($1)
-        end
-        rec.auto_exported_at = Time.now.utc
-        rec.expiry_date = (Date.today + 28)
-        rec.save
-      rescue => e
-        STDERR.puts "Failed to update LegacyExport after auto export: #{e.message}"
+        cfg['auto_export_attempted_on'] = today.to_s
+        write_legacy_config(cfg)
+      rescue => _e
+      end
+
+      # use the central perform_auto_export so expiry triggers same full flow
+      ok, msg = perform_auto_export('auto_export')
+      unless ok
+        STDERR.puts "Auto export on expiry failed: #{msg}"
       end
     end
   end
@@ -325,6 +308,15 @@ helpers do
   # HTML-escape helper for views (`h` is a common helper in ERB)
   def h(text)
     ERB::Util.html_escape(text.to_s)
+  end
+  # Flash helpers (simple session-backed flash)
+  def set_flash(type, message)
+    session[:flash] ||= {}
+    session[:flash][type.to_s] = message
+  end
+  def fetch_flash
+    f = session.delete(:flash) || {}
+    f
   end
 end
 
@@ -1945,16 +1937,7 @@ post '/database_manage/import' do
       cfg['auto_exported_file'] = nil
       cfg.delete('auto_exported_at')
       write_legacy_config(cfg)
-      # Persist import/expiry into DB-backed LegacyExport record
-      begin
-        rec = LegacyExport.first_or_create
-        rec.import_date = import_date
-        rec.expiry_date = Date.parse(expiry_date)
-        rec.auto_exported_file = nil
-        rec.auto_exported_at = nil
-        rec.save
-      rescue => _e
-      end
+      # keep YAML-only import/expiry recording
       @success += " Import recorded: day1=#{import_date.iso8601}, expiry=#{expiry_date}."
     rescue => e
       @error = "Import succeeded but failed to record import/expiry: #{e.message}"
@@ -2263,15 +2246,7 @@ post '/database_manage/set_expiry' do
   cfg['auto_exported_file'] = nil
   cfg.delete('auto_exported_at')
   write_legacy_config(cfg)
-  # Persist expiry into DB-backed LegacyExport record as the canonical source
-  begin
-    rec = LegacyExport.first_or_create
-    rec.expiry_date = Date.parse(date.to_s)
-    rec.auto_exported_file = nil
-    rec.auto_exported_at = nil
-    rec.save
-  rescue => _e
-  end
+  # YAML-only expiry persistence retained (no DB-backed record)
   @success = "Expiry date saved: #{date}"
   redirect '/database_manage'
 end
@@ -2533,7 +2508,23 @@ end
 
 delete '/equipments/:id' do
   require_super_admin!
-  Equipment.find(params[:id]).destroy
+  id = params[:id]
+  equip = Equipment.find_by(id: id)
+  unless equip
+    set_flash(:error, "Asset not found")
+    redirect '/equipments'
+  end
+
+  # Prevent deletion if there are active assignments or approved requests
+  has_active_assignments = UserEquipment.where(equipment_id: equip.id).where(active: true).exists?
+  has_approved_requests = Request.where(equipment_id: equip.id).where(status: 'approved').exists?
+  if has_active_assignments || has_approved_requests
+    set_flash(:error, "Cannot delete asset while it has active assignments or approved requests")
+    redirect '/equipments'
+  end
+
+  equip.destroy
+  set_flash(:notice, "Asset deleted")
   redirect '/equipments'
 end
 

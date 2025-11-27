@@ -43,7 +43,7 @@
       <label>Serial Number (optional)</label>
       <div style="display:flex; gap:8px; align-items:center">
         <input type="text" name="serial_number" id="serial_single" placeholder="Enter serial number if applicable" style="flex:1">
-        <button type="button" id="scan_serial_btn" class="btn-secondary" style="white-space:nowrap">Scan serial</button>
+        <button type="button" id="scan_serial_btn" class="btn-cta" style="white-space:nowrap;padding:8px 12px;">📷 Scan serial</button>
       </div>
     </div>
 
@@ -144,7 +144,7 @@
             var lbl = document.createElement('label'); lbl.innerText = c.replace('_',' ') ; lbl.style.display='block'; lbl.style.marginBottom='4px';
             var wrapper = document.createElement('div'); wrapper.style.display='flex'; wrapper.style.gap='8px'; wrapper.style.alignItems='center';
             var inp = document.createElement('input'); inp.type='text'; inp.name = 'serials['+i+']['+c+']'; inp.placeholder = c + ' serial'; inp.style.flex='1'; inp.style.padding='8px'; inp.style.borderRadius='6px'; inp.style.background='rgba(0,0,0,0.14)'; inp.style.color='#eaf6ff'; inp.style.border='1px solid rgba(255,255,255,0.04)';
-            var scanBtnLocal = document.createElement('button'); scanBtnLocal.type='button'; scanBtnLocal.className='btn-secondary'; scanBtnLocal.innerText='Scan'; scanBtnLocal.style.whiteSpace='nowrap';
+            var scanBtnLocal = document.createElement('button'); scanBtnLocal.type='button'; scanBtnLocal.className='btn-cta'; scanBtnLocal.innerText='📷 Scan'; scanBtnLocal.style.whiteSpace='nowrap'; scanBtnLocal.style.padding='6px 10px';
             scanBtnLocal.addEventListener('click', function(e){ e.preventDefault();
               // set the current serial input target and open the existing scanner modal
               currentSerialTarget = inp;
