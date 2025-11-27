@@ -5,9 +5,14 @@
   .toolbar { width:92px; background:rgba(0,0,0,0.06); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:12px; align-items:center }
   .tool-icon { width:56px; height:56px; border-radius:10px; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:grab; box-shadow:0 6px 18px rgba(0,0,0,0.08); padding:6px }
   .tool-icon svg { width:26px; height:26px; display:block }
+  .tool-icon .tool-img { width:28px; height:28px; display:block }
   .tool-label { display:none; font-size:0.78rem; color:var(--muted); margin-top:6px; text-align:center }
   .map-icon { position:absolute; width:44px; height:44px; border-radius:8px; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.12); transform:translate(-50%,-50%); padding:6px }
   .map-icon svg { width:22px; height:22px }
+  .map-icon .map-img { width:22px; height:22px; display:block }
+  .map-icon .badge { position:absolute; right:-6px; top:-6px; width:12px; height:12px; border-radius:50%; background:#bbb; border:2px solid #fff }
+  .map-icon.assigned .badge { background:#57a773 }
+  .map-icon.unassigned .badge { background:#cbd5e1 }
   .map-label { position:absolute; left:110%; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.95); color:#07101a; padding:6px 8px; border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.12); white-space:nowrap; display:none; font-size:0.8rem }
   .map-icon.selected { box-shadow: 0 0 0 4px rgba(99,102,241,0.12); border:2px solid rgba(99,102,241,0.18); }
   /* show label on hover */
@@ -46,17 +51,9 @@
       <% # Fixed palette of common network / office devices so user can drag icons regardless of office inventory %>
       <% palette = ['Laptop','Desktop','Router','Switch','Printer'] %>
       <% palette.each do |t| %>
-        <%# simple inline SVG icons for clarity %>
-        <% ico = case t.downcase
-                 when 'laptop' then %q{<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="5" width="18" height="11" rx="1.5" stroke="#111" stroke-width="1.2" fill="#f8fafc"/><path d="M2 18h20" stroke="#cbd5e1" stroke-width="1.2" stroke-linecap="round"/></svg>} 
-                 when 'desktop' then %q{<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="12" rx="1.5" stroke="#111" stroke-width="1.2" fill="#f8fafc"/><rect x="8" y="17" width="8" height="1.5" fill="#cbd5e1"/></svg>}
-                 when 'router' then %q{<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="8" width="16" height="8" rx="2" fill="#f8fafc" stroke="#111" stroke-width="1"/><path d="M8 6c1-2 8-2 9 0" stroke="#111" stroke-width="1" stroke-linecap="round" fill="none"/></svg>}
-                 when 'switch' then %q{<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7" width="18" height="6" rx="1.5" fill="#f8fafc" stroke="#111" stroke-width="1"/><circle cx="8" cy="10" r="0.9" fill="#111"/><circle cx="12" cy="10" r="0.9" fill="#111"/><circle cx="16" cy="10" r="0.9" fill="#111"/></svg>}
-                 when 'printer' then %q{<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="7" width="16" height="9" rx="1.5" fill="#f8fafc" stroke="#111" stroke-width="1"/><rect x="7" y="12" width="10" height="4" fill="#e6eef6"/></svg>}
-                 else %q{<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" fill="#f8fafc" stroke="#111"/></svg>}
-                 end %>
+        <% fname = t.downcase.gsub(' ', '-') %>
         <div class="tool-icon" draggable="true" data-type="<%= h t %>" title="<%= h t %>">
-          <%= ico %>
+          <img class="tool-img" src="/icons/<%= fname %>.svg" alt="<%= h t %>" onerror="this.style.display='none'" />
           <div class="tool-label"><%= h t %></div>
         </div>
       <% end %>
@@ -121,15 +118,10 @@
       el.style.left = ic.x + '%'; el.style.top = ic.y + '%';
       el.dataset.id = ic.id; el.dataset.type = ic.type; el.title = ic.label || (ic.type || 'device');
       // choose a simple SVG for the icon based on type
-      var svg = '';
       var t = (ic.type || '').toLowerCase();
-      if(t === 'laptop') svg = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="5" width="18" height="11" rx="1.5" stroke="#111" stroke-width="1.2" fill="#f8fafc"/><path d="M2 18h20" stroke="#cbd5e1" stroke-width="1.2" stroke-linecap="round"/></svg>';
-      else if(t === 'desktop') svg = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="18" height="12" rx="1.5" stroke="#111" stroke-width="1.2" fill="#f8fafc"/><rect x="8" y="17" width="8" height="1.5" fill="#cbd5e1"/></svg>';
-      else if(t === 'router') svg = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="8" width="16" height="8" rx="2" fill="#f8fafc" stroke="#111" stroke-width="1"/><path d="M8 6c1-2 8-2 9 0" stroke="#111" stroke-width="1" stroke-linecap="round" fill="none"/></svg>';
-      else if(t === 'switch') svg = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7" width="18" height="6" rx="1.5" fill="#f8fafc" stroke="#111" stroke-width="1"/><circle cx="8" cy="10" r="0.9" fill="#111"/><circle cx="12" cy="10" r="0.9" fill="#111"/><circle cx="16" cy="10" r="0.9" fill="#111"/></svg>';
-      else if(t === 'printer') svg = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="7" width="16" height="9" rx="1.5" fill="#f8fafc" stroke="#111" stroke-width="1"/><rect x="7" y="12" width="10" height="4" fill="#e6eef6"/></svg>';
-      else svg = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" fill="#f8fafc" stroke="#111"/></svg>';
-      el.innerHTML = svg + '<div class="map-label">' + (ic.label || ic.type || '') + '</div>';
+      var fname = encodeURIComponent(t.replace(/\s+/g,'-'));
+      el.innerHTML = '<img class="map-img" src="/icons/' + fname + '.svg" onerror="this.style.display=\'none\'" />' + '<div class="map-label">' + (ic.label || ic.type || '') + '</div>' + '<span class="badge"></span>';
+      if(ic.equipment_id){ el.classList.add('assigned'); } else { el.classList.add('unassigned'); }
       el.addEventListener('click', function(ev){ ev.stopPropagation(); selectIcon(ic, el); openIconPanel(ic, el); });
       // pointer drag to reposition
       el.addEventListener('pointerdown', function(e){ if(e.button !== 0) return; e.preventDefault(); startIconDrag(e, ic, el); });
