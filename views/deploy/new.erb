@@ -147,9 +147,13 @@
             var scanBtnLocal = document.createElement('button'); scanBtnLocal.type='button'; scanBtnLocal.className='btn-cta'; scanBtnLocal.innerText='📷 Scan'; scanBtnLocal.style.whiteSpace='nowrap'; scanBtnLocal.style.padding='6px 10px';
             scanBtnLocal.addEventListener('click', function(e){ e.preventDefault();
               // set the current serial input target and open the existing scanner modal
-              currentSerialTarget = inp;
-              guidedMode = false;
-              openScanner();
+              // use the exposed starter if available (scanner IIFE exposes window.startSerialScanner)
+              if(window && typeof window.startSerialScanner === 'function'){
+                window.startSerialScanner(inp);
+              } else {
+                // fallback (older behavior)
+                try{ currentSerialTarget = inp; openScanner(); }catch(e){}
+              }
             });
             wrapper.appendChild(inp); wrapper.appendChild(scanBtnLocal);
             fld.appendChild(lbl); fld.appendChild(wrapper); box.appendChild(fld);
@@ -287,10 +291,21 @@
       try{ if(zxingReader){ zxingReader.reset(); zxingReader = null; } }catch(e){}
     }
 
+    // expose a starter so other scopes (dynamically created buttons) can open the scanner
+    function startSerialScanner(target){
+      try{ currentSerialTarget = target; }catch(e){}
+      try{ openScanner(); }catch(e){ }
+    }
+    try{ window.startSerialScanner = startSerialScanner; }catch(e){}
+
     scanBtn.addEventListener('click', function(){
       // default single serial behavior
-      currentSerialTarget = serialInput;
-      openScanner();
+      if(window && typeof window.startSerialScanner === 'function'){
+        window.startSerialScanner(serialInput);
+      } else {
+        currentSerialTarget = serialInput;
+        openScanner();
+      }
     });
     closeBtn.addEventListener('click', function(){ closeScanner(); });
 
