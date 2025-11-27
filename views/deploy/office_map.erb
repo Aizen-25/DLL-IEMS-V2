@@ -26,16 +26,21 @@
   </div>
   <aside style="width:180px; max-width:220px">
     <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px"><strong>Available devices</strong></div>
-    <div class="toolbar" id="toolbar">
-      <% # Build palette from unique categories of equipments for this office %>
-      <% cats = @office_equipments.map(&:category).compact.uniq %>
-      <% if cats.empty? %>
-        <div style="color:var(--muted)">No devices found for this office</div>
-      <% else %>
-        <% cats.each_with_index do |c,i| %>
-          <div class="tool-icon" draggable="true" data-type="<%= h c %>" title="<%= h c %>"><span style="font-size:12px"><%= h c[0,2].upcase %></span></div>
-        <% end %>
+    <div class="toolbar" id="toolbar" aria-label="Palette">
+      <% # Fixed palette of common network / office devices so user can drag icons regardless of office inventory %>
+      <% palette = ['Laptop','Desktop','Router','Switch','Printer'] %>
+      <% palette.each do |t| %>
+        <% ico = case t.downcase
+                 when 'laptop' then '💻'
+                 when 'desktop' then '🖥️'
+                 when 'router' then '📡'
+                 when 'switch' then '🔀'
+                 when 'printer' then '🖨️'
+                 else '🔘'
+                 end %>
+        <div class="tool-icon" draggable="true" data-type="<%= h t %>" title="<%= h t %>"><span style="font-size:18px"><%= ico %></span></div>
       <% end %>
+      <div style="font-size:0.85rem;color:var(--muted);margin-top:8px;text-align:center">Drag icons onto the map</div>
     </div>
     <div style="margin-top:14px">
       <strong>Deployed equipment</strong>
