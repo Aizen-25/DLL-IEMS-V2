@@ -23,6 +23,7 @@ require_relative 'models/activity'
 require_relative 'models/user'
 require_relative 'models/user_equipment'
 require_relative 'models/equipment_history'
+require_relative 'models/legacy_export'
 set :database_file, 'config/database.yml'
 
 # If a DATABASE_URL is provided (Render/Postgres), prefer it for ActiveRecord
@@ -139,6 +140,15 @@ def perform_auto_export(prefix = 'auto_export')
     rescue => _e
     end
 
+    # Persist the same metadata into DB (single-row LegacyExport) for robust scheduling
+    begin
+      rec = LegacyExport.first_or_create
+      rec.auto_exported_file = File.basename(src)
+      rec.auto_exported_at = Time.now.utc
+      rec.save
+    rescue => _e
+    end
+
     # Attempt to upload the raw JSON to GitHub backup repo if configured
     if ENV['GITHUB_TOKEN'] && ENV['GITHUB_REPO']
       ok, msg = upload_file_to_github_repo(src)
@@ -179,9 +189,20 @@ def perform_auto_export(prefix = 'auto_export')
     # Persist upload logs and error message if upload failed
     begin
       cfg = read_legacy_config
-      cfg['auto_export_upload_logs'] = (cfg['auto_export_upload_logs'] || []) + upload_logs.map { |l| "#{Time.now.utc.iso8601} | #{l[:file]} | #{l[:result]}" }
+      new_logs = upload_logs.map { |l| "#{Time.now.utc.iso8601} | #{l[:file]} | #{l[:result]}" }
+      cfg['auto_export_upload_logs'] = (cfg['auto_export_upload_logs'] || []) + new_logs
       cfg['auto_export_upload_error'] = upload_msg unless uploaded
       write_legacy_config(cfg)
+      # Persist into DB as well
+      rec = LegacyExport.first_or_create
+      rec.auto_export_upload_logs = ((rec.auto_export_upload_logs || '') + "\n" + new_logs.join("\n")).strip
+      rec.auto_export_upload_error = upload_msg unless uploaded.nil?
+      if uploaded
+        rec.uploaded_to_repo = cfg['uploaded_to_repo'] if cfg['uploaded_to_repo']
+        rec.uploaded_at = Time.now.utc
+        rec.uploaded_file = cfg['uploaded_file'] if cfg['uploaded_file']
+      end
+      rec.save
     rescue => _e
     end
 
@@ -192,23 +213,39 @@ def perform_auto_export(prefix = 'auto_export')
 end
 
 def check_and_trigger_auto_export
+  # Prefer the DB-backed LegacyExport record for scheduling; fall back to YAML
+  rec = LegacyExport.first
   cfg = read_legacy_config
-  expiry = cfg['expiry_date']
-  exported = cfg['auto_exported_file']
+  expiry = rec&.expiry_date || cfg['expiry_date']
+  exported = rec&.auto_exported_file || cfg['auto_exported_file']
   return unless expiry
   begin
-    expiry_date = Date.parse(expiry.to_s)
+    expiry_date = expiry.is_a?(String) ? Date.parse(expiry.to_s) : expiry
   rescue
     return
   end
 
   today = Date.today
-  # Trigger automatic export when the expiry date is reached (or passed)
-  if today >= expiry_date && exported.to_s.strip.empty?
-    # use the central perform_auto_export so expiry triggers same full flow
+  # Trigger automatic export one day before the expiry date
+  trigger_date = expiry_date - 1
+  if today >= trigger_date && exported.to_s.strip.empty?
     ok, msg = perform_auto_export('auto_export')
     unless ok
       STDERR.puts "Auto export on expiry failed: #{msg}"
+    else
+      # After successful trigger, set new expiry = trigger_run_date + 28 days
+      begin
+        rec = LegacyExport.first_or_create
+        # try to extract filename from perform_auto_export message
+        if msg && msg.to_s =~ /Automatic backup created: (\S+)/
+          rec.auto_exported_file = File.basename($1)
+        end
+        rec.auto_exported_at = Time.now.utc
+        rec.expiry_date = (Date.today + 28)
+        rec.save
+      rescue => e
+        STDERR.puts "Failed to update LegacyExport after auto export: #{e.message}"
+      end
     end
   end
 end
@@ -1820,7 +1857,17 @@ post '/database_manage/import' do
   end
 
   conn = ActiveRecord::Base.connection
+  adapter = conn.adapter_name.to_s.downcase
+
   begin
+    # Disable FK checks/triggers for the session to avoid ordering problems
+    if adapter.include?('sqlite')
+      conn.execute('PRAGMA foreign_keys = OFF')
+    elsif adapter.include?('postg')
+      # disable triggers/constraints for session (safe for trusted imports)
+      conn.execute("SET session_replication_role = 'replica'")
+    end
+
     conn.transaction do
       data.each do |table, rows|
         next if ['schema_migrations', 'ar_internal_metadata'].include?(table)
@@ -1838,6 +1885,41 @@ post '/database_manage/import' do
           sql = "INSERT INTO #{conn.quote_table_name(table)} (#{cols.join(',')}) VALUES (#{vals.join(',')})"
           conn.execute(sql)
         end
+      end
+
+      # Basic integrity checks (fail if obvious FK violations exist)
+      # Check: requests.equipment_id -> equipments.id
+      begin
+        if ActiveRecord::Base.connection.table_exists?('requests') && ActiveRecord::Base.connection.table_exists?('equipments')
+          bad = conn.exec_query("SELECT COUNT(*) AS c FROM requests r LEFT JOIN equipments e ON r.equipment_id = e.id WHERE e.id IS NULL").first['c'].to_i
+          raise "Import integrity check failed: #{bad} requests reference missing equipments" if bad > 0
+        end
+      rescue => _e
+        raise _e
+      end
+      # Check: activities.user_id -> users.id
+      begin
+        if ActiveRecord::Base.connection.table_exists?('activities') && ActiveRecord::Base.connection.table_exists?('users')
+          bad = conn.exec_query("SELECT COUNT(*) AS c FROM activities a LEFT JOIN users u ON a.user_id = u.id WHERE a.user_id IS NOT NULL AND u.id IS NULL").first['c'].to_i
+          raise "Import integrity check failed: #{bad} activities reference missing users" if bad > 0
+        end
+      rescue => _e
+        raise _e
+      end
+      # Check: user_equipments.user_id -> users.id and user_equipments.equipment_id -> equipments.id
+      begin
+        if ActiveRecord::Base.connection.table_exists?('user_equipments')
+          if ActiveRecord::Base.connection.table_exists?('users')
+            bad = conn.exec_query("SELECT COUNT(*) AS c FROM user_equipments ue LEFT JOIN users u ON ue.user_id = u.id WHERE ue.user_id IS NOT NULL AND u.id IS NULL").first['c'].to_i
+            raise "Import integrity check failed: #{bad} user_equipments reference missing users" if bad > 0
+          end
+          if ActiveRecord::Base.connection.table_exists?('equipments')
+            bad = conn.exec_query("SELECT COUNT(*) AS c FROM user_equipments ue LEFT JOIN equipments e ON ue.equipment_id = e.id WHERE ue.equipment_id IS NOT NULL AND e.id IS NULL").first['c'].to_i
+            raise "Import integrity check failed: #{bad} user_equipments reference missing equipments" if bad > 0
+          end
+        end
+      rescue => _e
+        raise _e
       end
     end
     @success = 'Import completed successfully.'
@@ -1863,12 +1945,33 @@ post '/database_manage/import' do
       cfg['auto_exported_file'] = nil
       cfg.delete('auto_exported_at')
       write_legacy_config(cfg)
+      # Persist import/expiry into DB-backed LegacyExport record
+      begin
+        rec = LegacyExport.first_or_create
+        rec.import_date = import_date
+        rec.expiry_date = Date.parse(expiry_date)
+        rec.auto_exported_file = nil
+        rec.auto_exported_at = nil
+        rec.save
+      rescue => _e
+      end
       @success += " Import recorded: day1=#{import_date.iso8601}, expiry=#{expiry_date}."
     rescue => e
       @error = "Import succeeded but failed to record import/expiry: #{e.message}"
     end
   rescue => e
     @error = "Import failed: #{e.message}"
+  ensure
+    # Re-enable FK checks/triggers for the session
+    begin
+      if adapter && adapter.include?('sqlite')
+        conn.execute('PRAGMA foreign_keys = ON')
+      elsif adapter && adapter.include?('postg')
+        conn.execute("SET session_replication_role = 'origin'")
+      end
+    rescue => ex
+      STDERR.puts "Failed to re-enable FK checks after import: #{ex.class} - #{ex.message}"
+    end
   end
 
   erb :'database_manage/index'
@@ -2160,6 +2263,15 @@ post '/database_manage/set_expiry' do
   cfg['auto_exported_file'] = nil
   cfg.delete('auto_exported_at')
   write_legacy_config(cfg)
+  # Persist expiry into DB-backed LegacyExport record as the canonical source
+  begin
+    rec = LegacyExport.first_or_create
+    rec.expiry_date = Date.parse(date.to_s)
+    rec.auto_exported_file = nil
+    rec.auto_exported_at = nil
+    rec.save
+  rescue => _e
+  end
   @success = "Expiry date saved: #{date}"
   redirect '/database_manage'
 end
