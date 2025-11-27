@@ -20,6 +20,7 @@
 <div class="office-map-wrap">
   <div style="flex:1">
     <div id="mapCanvas" class="map-canvas" role="application" aria-label="Office map">
+      <div id="mapInner" style="position:absolute; inset:0; transform-origin:0 0;"></div>
       <div id="mapOverlay" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; color:#777">Drop icons here to place equipment</div>
     </div>
   </div>
@@ -52,86 +53,93 @@
 <script>
 (function(){
   var canvas = document.getElementById('mapCanvas');
+  var mapInner = document.getElementById('mapInner');
   var toolbar = document.getElementById('toolbar');
   var office = "<%= j @office_slug %>";
   var maps = { icons: [] };
-  var selectedIcon = null;
 
-  function showToast(msg){ var t = document.getElementById('toast'); t.innerText = msg; t.style.display='block'; setTimeout(function(){ t.style.display='none'; }, 1500); }
+  function showToast(msg){ var t = document.getElementById('toast'); t.innerText = msg; t.style.display='block'; setTimeout(function(){ t.style.display='none'; }, 1400); }
 
   function pct(x, total){ return Math.round((x/total)*10000)/100; }
-  function px(pct, total){ return (pct/100)*total; }
+
+  // transform state
+  var scale = 1.0, tx = 0, ty = 0;
+  function setTransform(){ mapInner.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')'; }
+
+  function screenToElementPixels(sx, sy){
+    var rect = canvas.getBoundingClientRect();
+    var preX = (sx - rect.left)/scale - tx;
+    var preY = (sy - rect.top)/scale - ty;
+    return { x: preX, y: preY };
+  }
+
+  function screenToPercent(sx, sy){
+    var p = screenToElementPixels(sx, sy);
+    var w = mapInner.offsetWidth || canvas.clientWidth;
+    var h = mapInner.offsetHeight || canvas.clientHeight;
+    return { x: (p.x / w) * 100, y: (p.y / h) * 100 };
+  }
 
   function renderMaps(){
-    // clear icons
-    canvas.querySelectorAll('.map-icon').forEach(function(n){ n.remove(); });
+    mapInner.querySelectorAll('.map-icon').forEach(function(n){ n.remove(); });
     maps.icons.forEach(function(ic){
       var el = document.createElement('div');
       el.className = 'map-icon' + (ic.equipment_id ? ' assigned' : '');
-      el.style.left = ic.x + '%';
-      el.style.top = ic.y + '%';
-      el.dataset.id = ic.id;
-      el.dataset.type = ic.type;
-      el.title = ic.label || (ic.type || 'device');
+      el.style.left = ic.x + '%'; el.style.top = ic.y + '%';
+      el.dataset.id = ic.id; el.dataset.type = ic.type; el.title = ic.label || (ic.type || 'device');
       el.innerText = (ic.type || '').substr(0,2).toUpperCase();
       el.addEventListener('click', function(ev){ ev.stopPropagation(); openIconPanel(ic, el); });
-      // allow dragging to reposition
-      el.draggable = true;
-      el.addEventListener('dragstart', function(e){ e.dataTransfer.setData('text/plain', JSON.stringify({ dragging: ic.id })); });
-      canvas.appendChild(el);
+      // pointer drag to reposition
+      el.addEventListener('pointerdown', function(e){ if(e.button !== 0) return; e.preventDefault(); startIconDrag(e, ic, el); });
+      mapInner.appendChild(el);
     });
+    setTransform();
   }
 
   function openIconPanel(ic, el){
-    // remove existing tiny panels
     document.querySelectorAll('.tiny-panel').forEach(function(n){ n.remove(); });
     var rect = el.getBoundingClientRect();
     var panel = document.createElement('div'); panel.className='tiny-panel';
-    panel.style.left = (rect.right + 8) + 'px';
-    panel.style.top = (rect.top) + 'px';
+    panel.style.left = (rect.right + 8) + 'px'; panel.style.top = (rect.top) + 'px';
     var html = '';
     html += '<div style="font-weight:700;margin-bottom:6px">' + (ic.label || (ic.type||'')) + '</div>';
     html += '<div style="margin-bottom:6px"><label>Link equipment:</label><br><input id="link_input" type="text" placeholder="serial or name" style="width:240px;padding:6px;border:1px solid #ccc;border-radius:6px"></div>';
     html += '<div style="display:flex;gap:8px;justify-content:flex-end"><button id="unlink_btn" class="btn-secondary">Unlink</button><button id="save_btn" class="btn-cta">Save</button></div>';
-    panel.innerHTML = html;
-    document.body.appendChild(panel);
-    document.getElementById('link_input').focus();
-    document.getElementById('save_btn').addEventListener('click', function(){
-      var v = document.getElementById('link_input').value.trim();
-      if(!v){ showToast('Enter serial or name to link'); return; }
-      // find equipment by serial or name in deployedList
-      var found = Array.from(document.querySelectorAll('#deployedList [data-eid]')).map(function(n){ return { id: n.dataset.eid, text: n.innerText }; }).filter(function(x){ return x.text.toLowerCase().indexOf(v.toLowerCase()) !== -1; });
-      if(found.length>0){ ic.equipment_id = found[0].id; ic.label = found[0].text; saveMaps(); renderMaps(); panel.remove(); showToast('Linked'); }
-      else { showToast('No matching equipment found'); }
-    });
+    panel.innerHTML = html; document.body.appendChild(panel); document.getElementById('link_input').focus();
+    document.getElementById('save_btn').addEventListener('click', function(){ var v = document.getElementById('link_input').value.trim(); if(!v){ showToast('Enter serial or name to link'); return; } var found = Array.from(document.querySelectorAll('#deployedList [data-eid]')).map(function(n){ return { id: n.dataset.eid, text: n.innerText }; }).filter(function(x){ return x.text.toLowerCase().indexOf(v.toLowerCase()) !== -1; }); if(found.length>0){ ic.equipment_id = found[0].id; ic.label = found[0].text; saveMaps(); renderMaps(); panel.remove(); showToast('Linked'); } else { showToast('No matching equipment found'); } });
     document.getElementById('unlink_btn').addEventListener('click', function(){ ic.equipment_id = null; ic.label = null; saveMaps(); renderMaps(); panel.remove(); showToast('Unlinked'); });
+  }
+
+  // Icon drag helpers
+  var iconDragState = null;
+  function startIconDrag(e, ic, el){
+    var start = { x: e.clientX, y: e.clientY, ic: ic };
+    function onMove(ev){ ev.preventDefault(); var pctPos = screenToPercent(ev.clientX, ev.clientY); ic.x = Math.max(0, Math.min(100, pctPos.x)); ic.y = Math.max(0, Math.min(100, pctPos.y)); el.style.left = ic.x + '%'; el.style.top = ic.y + '%'; }
+    function onUp(ev){ document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); saveMaps(); showToast('Moved'); }
+    document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp);
   }
 
   // Load existing map
   fetch('/api/deploy/office/' + encodeURIComponent(office) + '/map').then(function(r){ return r.json(); }).then(function(d){ maps = d || { icons: [] }; renderMaps(); }).catch(function(){ maps = { icons: [] }; renderMaps(); });
 
-  // Toolbar drag
-  toolbar.addEventListener('dragstart', function(e){ var t = e.target; if(t && t.dataset && t.dataset.type){ e.dataTransfer.setData('text/plain', JSON.stringify({ newType: t.dataset.type })); } });
+  // Toolbar pointer drag (works for touch and mouse)
+  var activeGhost = null;
+  function createGhost(type){ var g = document.createElement('div'); g.className='map-icon'; g.style.position='fixed'; g.style.pointerEvents='none'; g.style.width='48px'; g.style.height='48px'; g.style.left='0px'; g.style.top='0px'; g.innerText = (type||'').substr(0,2).toUpperCase(); document.body.appendChild(g); return g; }
+  toolbar.addEventListener('pointerdown', function(e){ var t = e.target.closest && e.target.closest('.tool-icon'); if(!t) return; e.preventDefault(); var type = t.dataset.type; activeGhost = createGhost(type); function onMove(ev){ activeGhost.style.left = (ev.clientX - 24) + 'px'; activeGhost.style.top = (ev.clientY - 24) + 'px'; } function onUp(ev){ document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); if(activeGhost){ var rect = canvas.getBoundingClientRect(); if(ev.clientX >= rect.left && ev.clientX <= rect.right && ev.clientY >= rect.top && ev.clientY <= rect.bottom){ var pctPos = screenToPercent(ev.clientX, ev.clientY); var nid = 'ic_' + (Date.now()) + '_' + Math.floor(Math.random()*1000); maps.icons.push({ id: nid, type: type, x: pctPos.x, y: pctPos.y, equipment_id: null, label: null }); renderMaps(); saveMaps(); showToast('Placed'); } activeGhost.remove(); activeGhost = null; } document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp); });
 
-  // Canvas drop
-  canvas.addEventListener('dragover', function(e){ e.preventDefault(); });
-  canvas.addEventListener('drop', function(e){ e.preventDefault(); var data = e.dataTransfer.getData('text/plain'); try{ var obj = JSON.parse(data); var rect = canvas.getBoundingClientRect(); if(obj.newType){ var xpct = pct(e.clientX - rect.left, rect.width); var ypct = pct(e.clientY - rect.top, rect.height); var nid = 'ic_' + (Date.now()) + '_' + Math.floor(Math.random()*1000);
-        maps.icons.push({ id: nid, type: obj.newType, x: xpct, y: ypct, equipment_id: null, label: null }); renderMaps(); saveMaps(); showToast('Placed'); }
-        else if(obj.dragging){ // reposition
-          var id = obj.dragging; var rect = canvas.getBoundingClientRect(); var ix = pct(e.clientX - rect.left, rect.width); var iy = pct(e.clientY - rect.top, rect.height);
-          var ic = maps.icons.find(function(x){ return x.id == id }); if(ic){ ic.x = ix; ic.y = iy; renderMaps(); saveMaps(); showToast('Moved'); }
-        }
-      }catch(err){ console.error(err); }
-  });
+  // Canvas pan & pinch-zoom
+  var pointerState = { pointers: {}, lastPan: null, pinch: null };
+  canvas.addEventListener('pointerdown', function(e){ canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId); pointerState.pointers[e.pointerId] = e; if(Object.keys(pointerState.pointers).length === 1){ pointerState.lastPan = { x: e.clientX, y: e.clientY, tx: tx, ty: ty }; } if(Object.keys(pointerState.pointers).length === 2){ var ps = Object.values(pointerState.pointers); var a = ps[0], b = ps[1]; var dx = b.clientX - a.clientX, dy = b.clientY - a.clientY; pointerState.pinch = { dist: Math.hypot(dx,dy), midX: (a.clientX+b.clientX)/2, midY: (a.clientY+b.clientY)/2, startScale: scale, startTx: tx, startTy: ty }; } });
 
-  // Allow reposition by dropping icons outside toolbar: listen for dragend on document
-  document.addEventListener('dragend', function(e){ /* handled by drop logic */ });
+  canvas.addEventListener('pointermove', function(e){ if(!pointerState.pointers[e.pointerId]) return; pointerState.pointers[e.pointerId] = e; if(pointerState.pinch){ var ps = Object.values(pointerState.pointers); if(ps.length < 2) return; var a = ps[0], b = ps[1]; var dx = b.clientX - a.clientX, dy = b.clientY - a.clientY; var newDist = Math.hypot(dx,dy); var ns = pointerState.pinch.startScale * (newDist / pointerState.pinch.dist); ns = Math.max(0.25, Math.min(3, ns)); var midX = (a.clientX + b.clientX)/2, midY = (a.clientY + b.clientY)/2; var pre = screenToElementPixels(midX, midY); var s2 = ns; var rect = canvas.getBoundingClientRect(); var tx2 = ( (midX - rect.left) / s2 ) - pre.x; var ty2 = ( (midY - rect.top) / s2 ) - pre.y; scale = s2; tx = tx2; ty = ty2; setTransform(); } else if(pointerState.lastPan && Object.keys(pointerState.pointers).length === 1){ var ev = e; var dx = ev.clientX - pointerState.lastPan.x; var dy = ev.clientY - pointerState.lastPan.y; tx = pointerState.lastPan.tx + dx/scale; ty = pointerState.lastPan.ty + dy/scale; setTransform(); } });
+
+  canvas.addEventListener('pointerup', function(e){ try{ canvas.releasePointerCapture && canvas.releasePointerCapture(e.pointerId); }catch(_){} delete pointerState.pointers[e.pointerId]; pointerState.lastPan = null; pointerState.pinch = null; });
+
+  // wheel zoom (desktop)
+  canvas.addEventListener('wheel', function(e){ e.preventDefault(); var delta = -e.deltaY; var zoomFactor = delta > 0 ? 1.08 : 0.92; var s2 = Math.max(0.25, Math.min(3, scale * zoomFactor)); var rect = canvas.getBoundingClientRect(); var pre = screenToElementPixels(e.clientX, e.clientY); var tx2 = ( (e.clientX - rect.left) / s2 ) - pre.x; var ty2 = ( (e.clientY - rect.top) / s2 ) - pre.y; scale = s2; tx = tx2; ty = ty2; setTransform(); }, { passive: false });
 
   // Save maps to server
-  function saveMaps(){
-    fetch('/api/deploy/office/' + encodeURIComponent(office) + '/map', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(maps) })
-    .then(function(r){ if(r.ok) showToast('Saved'); else showToast('Save failed'); }).catch(function(){ showToast('Save failed'); });
-  }
+  function saveMaps(){ fetch('/api/deploy/office/' + encodeURIComponent(office) + '/map', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(maps) }).then(function(r){ if(r.ok) showToast('Saved'); else showToast('Save failed'); }).catch(function(){ showToast('Save failed'); }); }
 
   // click outside to remove tiny panels
   document.addEventListener('click', function(ev){ if(!ev.target.closest('.tiny-panel')){ document.querySelectorAll('.tiny-panel').forEach(function(n){ n.remove(); }); } });
