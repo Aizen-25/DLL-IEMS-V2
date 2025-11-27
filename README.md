@@ -62,3 +62,34 @@ Safety notes & caveats
 - Inspect logs: the rake task prints progress and any per-row failures. Check Render deploy logs or run locally for diagnostics.
 
 If you want help customizing the transfer behaviour (batching, different conflict keys, skipping tables), tell me which tables or keys you need and I can update the task.
+
+
+## Branching & Deployment (Manual Stable Updates Only)
+
+Guiding principle: `stable-style` is the working branch for development and deploy verification. `stable` is a conservative snapshot that must only be updated manually after full validation.
+
+- Use `stable-style` for active development, iterative commits, and Deploy verification. Configure Render to deploy from `stable-style` if desired.
+- After a successful deploy to Render, validate all functionality (manual walkthroughs, smoke tests, and any automated checks you rely on).
+- Only when you are fully confident the deployed app is stable should you update the `stable` branch. Updates to `stable` must be manual and intentional — do NOT automate pushing `stable-style` into `stable`.
+
+Recommended manual update (PR/merge path - preferred):
+
+```powershell
+# create a short-lived PR from stable-style into stable, review, then merge
+git checkout stable
+git merge --no-ff stable-style
+git push origin stable
+```
+
+If you prefer an explicit one-step backup and you fully understand the implications, you can fast-forward `stable` (manual action only):
+
+```powershell
+# Manual one-step: only run this when you are certain
+git push origin stable-style:stable
+```
+
+Notes:
+- Do NOT configure automated processes that update `stable` directly from `stable-style`. `stable` is intended as a verified rollback point and should change only by deliberate human action.
+- Keep `stable` as the canonical validated backup. If you need to rollback to a known-good state, `stable` should reflect that release.
+
+If you want, I can add a `CONTRIBUTING.md` with a short checklist for verification steps (smoke tests, manual flows to exercise) that must pass before `stable` is updated.
