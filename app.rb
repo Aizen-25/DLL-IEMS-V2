@@ -1906,6 +1906,15 @@ post '/database_manage/run_backup' do
       end
     end
 
+    # persist upload failure message so admins can inspect it later
+    unless uploaded
+      begin
+        cfg['auto_export_upload_error'] = upload_msg
+        write_legacy_config(cfg)
+      rescue => _e
+      end
+    end
+
     @success = "Automatic backup created: #{File.basename(src)}"
     @success += uploaded ? " and uploaded to repo" : " (not uploaded to repo)"
     @success += ": #{upload_msg}" if upload_msg && !upload_msg.empty?
@@ -1929,21 +1938,36 @@ def upload_file_to_github_repo(path)
       FileUtils.mkdir_p(repo_dir)
       Dir.chdir(repo_dir) do
         # Initialize a small git repo and push the backup file into a backups branch
-        Open3.capture3('git', 'init')
-        Open3.capture3('git', 'config', 'user.name', 'auto-backup')
-        Open3.capture3('git', 'config', 'user.email', 'auto-backup@example.com')
+        logs = []
+        cmds = []
+
+        cmds << ['git', 'init']
+        cmds << ['git', 'config', 'user.name', 'auto-backup']
+        cmds << ['git', 'config', 'user.email', 'auto-backup@example.com']
         FileUtils.mkdir_p('backups')
         dest = File.join('backups', File.basename(path))
         FileUtils.cp(path, dest)
-        Open3.capture3('git', 'add', '.')
-        Open3.capture3('git', 'commit', '-m', "Add backup #{File.basename(path)}")
+        cmds << ['git', 'add', '.']
+        cmds << ['git', 'commit', '-m', "Add backup #{File.basename(path)}"]
         remote_url = "https://x-access-token:#{token}@github.com/#{repo}.git"
-        Open3.capture3('git', 'remote', 'add', 'origin', remote_url)
+        cmds << ['git', 'remote', 'add', 'origin', remote_url]
+        # run each command and collect output
+        cmds.each do |c|
+          out, err, st = Open3.capture3(*c)
+          logs << { cmd: c.join(' '), out: out.to_s.strip, err: err.to_s.strip, status: st.exitstatus }
+          # If a non-push command failed, stop early and return the logs
+          if !st.success? && !(c[0] == 'git' && c[1] == 'commit' && out.to_s.include?('nothing to commit'))
+            return [false, "git command failed: #{c.join(' ')}; err=#{err.to_s.strip}; out=#{out.to_s.strip}; logs=#{logs.inspect}"]
+          end
+        end
+
+        # Finally push to backups branch
         out, err, st = Open3.capture3('git', 'push', 'origin', 'HEAD:refs/heads/backups')
+        logs << { cmd: 'git push origin HEAD:refs/heads/backups', out: out.to_s.strip, err: err.to_s.strip, status: st.exitstatus }
         if st.success?
-          return [true, out.to_s.strip]
+          return [true, "push: #{out.to_s.strip}; logs: #{logs.inspect}"]
         else
-          return [false, err.to_s.strip.empty? ? out.to_s.strip : err.to_s.strip]
+          return [false, "push failed: err=#{err.to_s.strip}; out=#{out.to_s.strip}; logs=#{logs.inspect}"]
         end
       end
     end
