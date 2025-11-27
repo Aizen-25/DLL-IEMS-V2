@@ -116,10 +116,7 @@ def perform_auto_export(prefix = 'auto_export')
     src = File.join(LEGACY_EXPORT_DIR, fname)
     gz_path = "#{src}.gz"
 
-    uploaded = false
-    upload_msg = nil
-
-    # gzip the JSON locally for storage (ensure the raw JSON file exists first)
+    # gzip the JSON locally for storage
     begin
       Zlib::GzipWriter.open(gz_path) do |gz|
         gz.write(File.read(src))
@@ -128,21 +125,25 @@ def perform_auto_export(prefix = 'auto_export')
       return [false, "Failed to gzip export: #{e.message}"]
     end
 
-    # record export in legacy config (so UI shows it) AFTER the file exists
+    uploaded = false
+    upload_msg = nil
+    upload_logs = []
+
+    # record export in legacy config (so UI shows it)
     begin
       cfg = read_legacy_config
       cfg['auto_exported_file'] = File.basename(src)
       cfg['auto_exported_at'] = Time.now.utc.iso8601
       write_legacy_config(cfg)
     rescue => _e
-      # non-fatal: continue but don't block export
     end
 
     # Attempt to upload the raw JSON to GitHub backup repo if configured
     if ENV['GITHUB_TOKEN'] && ENV['GITHUB_REPO']
-      ok, upload_msg = upload_file_to_github_repo(src)
-      uploaded = ok
+      ok, msg = upload_file_to_github_repo(src)
+      upload_logs << { file: File.basename(src), result: msg }
       if ok
+        uploaded = true
         begin
           cfg = read_legacy_config
           cfg['uploaded_to_repo'] = ENV['GITHUB_REPO']
@@ -151,13 +152,16 @@ def perform_auto_export(prefix = 'auto_export')
           write_legacy_config(cfg)
         rescue => _e
         end
+      else
+        upload_msg = msg
       end
-    end
 
-    # Attempt to upload the gzipped JSON to GitHub repo if configured
-    if ENV['GITHUB_TOKEN'] && ENV['GITHUB_REPO']
+      # Attempt to upload the gzipped JSON to GitHub repo if configured
       ok2, msg2 = upload_file_to_github_repo(gz_path)
+      upload_logs << { file: File.basename(gz_path), result: msg2 }
       if ok2
+        uploaded = true
+        upload_msg = msg2
         begin
           cfg = read_legacy_config
           cfg['uploaded_to_repo'] = ENV['GITHUB_REPO']
@@ -166,21 +170,18 @@ def perform_auto_export(prefix = 'auto_export')
           write_legacy_config(cfg)
         rescue => _e
         end
-        uploaded = true
-        upload_msg = msg2
       else
         upload_msg = [upload_msg, msg2].compact.join('; ')
       end
     end
 
-    # Persist upload error message if upload failed
-    unless uploaded
-      begin
-        cfg = read_legacy_config
-        cfg['auto_export_upload_error'] = upload_msg
-        write_legacy_config(cfg)
-      rescue => _e
-      end
+    # Persist upload logs and error message if upload failed
+    begin
+      cfg = read_legacy_config
+      cfg['auto_export_upload_logs'] = (cfg['auto_export_upload_logs'] || []) + upload_logs.map { |l| "#{Time.now.utc.iso8601} | #{l[:file]} | #{l[:result]}" }
+      cfg['auto_export_upload_error'] = upload_msg unless uploaded
+      write_legacy_config(cfg)
+    rescue => _e
     end
 
     return [true, "Automatic backup created: #{File.basename(src)}" + (uploaded ? " and uploaded to repo" : " (not uploaded)") + (upload_msg && !upload_msg.empty? ? ": #{upload_msg}" : "")]
@@ -1770,6 +1771,7 @@ get '/database_manage' do
   @auto_export_file = cfg['auto_exported_file']
   @exports = Dir.glob(File.join(LEGACY_EXPORT_DIR, '*.json')).map { |p| File.basename(p) }.sort.reverse
   @auto_export_upload_error = cfg['auto_export_upload_error']
+  @auto_export_upload_logs = cfg['auto_export_upload_logs'] || []
 
   erb :'database_manage/index'
 end
@@ -1910,10 +1912,12 @@ post '/database_manage/run_backup' do
     rescue => _e
     end
 
+    upload_logs = []
     # Attempt to upload the raw JSON to GitHub backup repo if configured
     if ENV['GITHUB_TOKEN'] && ENV['GITHUB_REPO']
       ok, upload_msg = upload_file_to_github_repo(src)
       uploaded = ok
+      upload_logs << { file: File.basename(src), result: upload_msg }
       if ok
         begin
           cfg['uploaded_to_repo'] = ENV['GITHUB_REPO']
@@ -1923,12 +1927,37 @@ post '/database_manage/run_backup' do
         rescue => _e
         end
       end
-    end
 
-    # persist upload failure message so admins can inspect it later
-    unless uploaded
+      # Attempt to upload gz as well
+      ok2, msg2 = upload_file_to_github_repo(gz_path)
+      upload_logs << { file: File.basename(gz_path), result: msg2 }
+      if ok2
+        begin
+          cfg['uploaded_to_repo'] = ENV['GITHUB_REPO']
+          cfg['uploaded_at'] = Time.now.utc.iso8601
+          cfg['uploaded_gz'] = File.basename(gz_path)
+          write_legacy_config(cfg)
+        rescue => _e
+        end
+        uploaded = true
+        upload_msg = msg2
+      else
+        upload_msg = [upload_msg, msg2].compact.join('; ')
+      end
+
+      # persist detailed logs and error message
       begin
-        cfg['auto_export_upload_error'] = upload_msg
+        cfg = read_legacy_config
+        cfg['auto_export_upload_logs'] = (cfg['auto_export_upload_logs'] || []) + upload_logs.map { |l| "#{Time.now.utc.iso8601} | #{l[:file]} | #{l[:result]}" }
+        cfg['auto_export_upload_error'] = upload_msg unless uploaded
+        write_legacy_config(cfg)
+      rescue => _e
+      end
+    else
+      # no github configured: persist no-op log entry
+      begin
+        cfg = read_legacy_config
+        cfg['auto_export_upload_logs'] = (cfg['auto_export_upload_logs'] || []) + ["#{Time.now.utc.iso8601} | skipped: GITHUB_TOKEN or GITHUB_REPO not set"]
         write_legacy_config(cfg)
       rescue => _e
       end

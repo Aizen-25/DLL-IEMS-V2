@@ -34,6 +34,14 @@
         <pre style="white-space:pre-wrap; word-break:break-word; color:var(--muted); margin-top:6px; font-size:0.9rem;"><%= h @auto_export_upload_error %></pre>
       </div>
     <% end %>
+    <% if @auto_export_upload_logs && @auto_export_upload_logs.any? %>
+      <div style="margin-top:12px; background:rgba(0,0,0,0.03); padding:10px; border-radius:6px;">
+        <strong>Upload logs (recent):</strong>
+        <pre style="white-space:pre-wrap; word-break:break-word; color:var(--muted); margin-top:6px; font-size:0.9rem;"><% @auto_export_upload_logs.last(10).each do |log| %>
+<%= h log %>
+<% end %></pre>
+      </div>
+    <% end %>
     <% if @exports && @exports.any? %>
       <div style="margin-top:8px">
         <strong>Available exports:</strong>
