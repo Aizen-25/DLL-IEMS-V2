@@ -16,6 +16,7 @@ require 'open3'
 require 'tmpdir'
 require 'yaml'
 require 'net/http'
+require 'base64'
 require_relative 'models/equipment'
 require_relative 'models/request'
 require_relative 'models/activity'
@@ -1980,6 +1981,16 @@ def upload_file_to_github_repo(path)
     return [false, 'GITHUB_TOKEN or GITHUB_REPO not set']
   end
 
+  # Prefer REST API upload (safer for ephemeral environments). Fall back to git push if REST fails.
+  begin
+    ok, msg = rest_upload_file_to_github(repo, token, path)
+    return [ok, msg] if ok || msg
+  rescue => e
+    # continue to git fallback
+    rest_err = "REST upload error: #{e.class} - #{e.message}"
+  end
+
+  # If REST failed or returned a nil message, try the git-based method as a fallback
   begin
     Dir.mktmpdir('backup_push') do |td|
       repo_dir = File.join(td, 'repo')
@@ -2015,12 +2026,121 @@ def upload_file_to_github_repo(path)
         if st.success?
           return [true, "push: #{out.to_s.strip}; logs: #{logs.inspect}"]
         else
-          return [false, "push failed: err=#{err.to_s.strip}; out=#{out.to_s.strip}; logs=#{logs.inspect}"]
+          # include REST error if present to give context
+          fallback_msg = rest_err ? "; rest_err=#{rest_err}" : ''
+          return [false, "push failed: err=#{err.to_s.strip}; out=#{out.to_s.strip}; logs=#{logs.inspect}#{fallback_msg}"]
         end
       end
     end
   rescue => e
     return [false, e.message]
+  end
+end
+
+def rest_upload_file_to_github(repo, token, path)
+  # repo is in owner/name format
+  owner, repo_name = repo.split('/', 2)
+  unless owner && repo_name
+    return [false, 'GITHUB_REPO must be in owner/repo format']
+  end
+
+  api_base = 'https://api.github.com'
+  target_path = "backups/#{File.basename(path)}"
+  headers = {
+    'Authorization' => "token #{token}",
+    'User-Agent' => 'inventory-system-backup',
+    'Accept' => 'application/vnd.github+json'
+  }
+
+  logs = []
+
+  # Helper to perform HTTP requests
+  http = lambda do |method, uri_str, body = nil|
+    uri = URI(uri_str)
+    req_class = case method.to_s.downcase
+                when 'get' then Net::HTTP::Get
+                when 'post' then Net::HTTP::Post
+                when 'put' then Net::HTTP::Put
+                when 'patch' then Net::HTTP::Patch
+                when 'delete' then Net::HTTP::Delete
+                else Net::HTTP::Get
+                end
+    req = req_class.new(uri.request_uri)
+    headers.each { |k,v| req[k] = v }
+    if body
+      req['Content-Type'] = 'application/json'
+      req.body = body.to_json
+    end
+    Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |h|
+      res = h.request(req)
+      return res
+    end
+  end
+
+  begin
+    # Ensure branch 'backups' exists; if not, create it from default branch
+    ref_uri = "#{api_base}/repos/#{owner}/#{repo_name}/git/ref/heads/backups"
+    res = http.call('get', ref_uri)
+    if res.code.to_i == 200
+      logs << "branch backups exists"
+    else
+      # create branch from default branch
+      repo_uri = "#{api_base}/repos/#{owner}/#{repo_name}"
+      rres = http.call('get', repo_uri)
+      if rres.code.to_i != 200
+        return [false, "Failed to query repo info: #{rres.code} #{rres.body}"]
+      end
+      repo_info = JSON.parse(rres.body) rescue {}
+      default_branch = repo_info['default_branch'] || 'main'
+      # get default branch ref
+      base_ref_uri = "#{api_base}/repos/#{owner}/#{repo_name}/git/ref/heads/#{default_branch}"
+      bres = http.call('get', base_ref_uri)
+      if bres.code.to_i != 200
+        return [false, "Failed to get default branch ref: #{bres.code} #{bres.body}"]
+      end
+      base_info = JSON.parse(bres.body) rescue {}
+      base_sha = base_info.dig('object','sha')
+      if base_sha.to_s.strip.empty?
+        return [false, 'Failed to determine base SHA to create backups branch']
+      end
+      # create new ref
+      create_ref_uri = "#{api_base}/repos/#{owner}/#{repo_name}/git/refs"
+      creq_body = { ref: "refs/heads/backups", sha: base_sha }
+      cres = http.call('post', create_ref_uri, creq_body)
+      if cres.code.to_i != 201
+        return [false, "Failed to create backups branch: #{cres.code} #{cres.body}"]
+      end
+      logs << "created backups branch from #{default_branch} (#{base_sha})"
+    end
+
+    # Check if file exists on backups branch to obtain sha for update
+    contents_get = "#{api_base}/repos/#{owner}/#{repo_name}/contents/#{URI.encode_www_form_component(target_path)}?ref=backups"
+    cres = http.call('get', contents_get)
+    existing_sha = nil
+    if cres.code.to_i == 200
+      cinfo = JSON.parse(cres.body) rescue {}
+      existing_sha = cinfo['sha']
+      logs << "existing file sha=#{existing_sha}"
+    end
+
+    # Prepare content
+    raw = File.binread(path)
+    b64 = Base64.strict_encode64(raw)
+
+    put_uri = "#{api_base}/repos/#{owner}/#{repo_name}/contents/#{URI.encode_www_form_component(target_path)}"
+    body = { message: "Add backup #{File.basename(path)}", content: b64, branch: 'backups' }
+    body[:sha] = existing_sha if existing_sha
+    pres = http.call('put', put_uri, body)
+    if [200,201].include?(pres.code.to_i)
+      info = JSON.parse(pres.body) rescue {}
+      action = pres.code.to_i == 201 ? 'created' : 'updated'
+      logs << "file #{action} on backups branch"
+      return [true, "#{action}: #{info['content'] && info['content']['path']} ; logs: #{logs.join(' | ')}"]
+    else
+      return [false, "contents API failed: #{pres.code} #{pres.body} ; logs: #{logs.join(' | ')}"]
+    end
+  rescue => e
+    return [false, "REST uploader exception: #{e.class} - #{e.message}"]
   end
 end
 
