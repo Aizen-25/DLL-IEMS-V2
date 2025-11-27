@@ -5,6 +5,7 @@
   .toolbar { width:72px; background:rgba(0,0,0,0.06); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:12px; align-items:center }
   .tool-icon { width:48px; height:48px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; cursor:grab; box-shadow:0 6px 18px rgba(0,0,0,0.08) }
   .map-icon { position:absolute; width:40px; height:40px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.12); transform:translate(-50%,-50%); }
+  .map-icon.selected { box-shadow: 0 0 0 4px rgba(99,102,241,0.12); border:2px solid rgba(99,102,241,0.18); }
   .map-icon.assigned { border:3px solid #57a773 }
   .tiny-panel { position:absolute; background:#fff; border-radius:8px; padding:8px; box-shadow:0 12px 40px rgba(0,0,0,0.2); z-index:4000 }
   .toast { position:fixed; right:18px; bottom:18px; background:#111; color:#fff; padding:10px 14px; border-radius:8px; opacity:0.95 }
@@ -45,6 +46,14 @@
     <div style="margin-top:14px">
       <strong>Deployed equipment</strong>
       <div id="deployedList" style="margin-top:8px; max-height:380px; overflow:auto; background:transparent; padding-right:6px">
+        <% if defined?(@office_assigned_units) && @office_assigned_units.any? %>
+          <% @office_assigned_units.each do |ue| %>
+            <div class="muted" data-eid="<%= ue.equipment_id %>" data-ueid="<%= ue.id %>" data-user="<%= h ue.assigned_username %>">
+              <strong><%= h(ue.equipment_name) %></strong>
+              <div style="font-size:0.85rem;color:var(--muted)">serial: <%= h(ue.serial) %> — assigned to <%= h(ue.assigned_username) %></div>
+            </div>
+          <% end %>
+        <% end %>
         <% @office_equipments.each do |eq| %>
           <div class="muted" data-eid="<%= eq.id %>"><%= h(eq.name) %> <span style="color:var(--muted)">(<%= h eq.serial_number %>)</span></div>
         <% end %>
@@ -93,12 +102,21 @@
       el.style.left = ic.x + '%'; el.style.top = ic.y + '%';
       el.dataset.id = ic.id; el.dataset.type = ic.type; el.title = ic.label || (ic.type || 'device');
       el.innerText = (ic.type || '').substr(0,2).toUpperCase();
-      el.addEventListener('click', function(ev){ ev.stopPropagation(); openIconPanel(ic, el); });
+      el.addEventListener('click', function(ev){ ev.stopPropagation(); selectIcon(ic, el); openIconPanel(ic, el); });
       // pointer drag to reposition
       el.addEventListener('pointerdown', function(e){ if(e.button !== 0) return; e.preventDefault(); startIconDrag(e, ic, el); });
       mapInner.appendChild(el);
     });
     setTransform();
+  }
+
+  // selection state for linking via deployed list
+  var selectedIcon = null;
+  function selectIcon(ic, el){
+    selectedIcon = ic;
+    // visual selection
+    mapInner.querySelectorAll('.map-icon').forEach(function(n){ n.classList.remove('selected'); });
+    try{ el.classList.add('selected'); }catch(e){}
   }
 
   function openIconPanel(ic, el){
@@ -131,6 +149,9 @@
   var activeGhost = null;
   function createGhost(type){ var g = document.createElement('div'); g.className='map-icon'; g.style.position='fixed'; g.style.pointerEvents='none'; g.style.width='48px'; g.style.height='48px'; g.style.left='0px'; g.style.top='0px'; g.innerText = (type||'').substr(0,2).toUpperCase(); document.body.appendChild(g); return g; }
   toolbar.addEventListener('pointerdown', function(e){ var t = e.target.closest && e.target.closest('.tool-icon'); if(!t) return; e.preventDefault(); var type = t.dataset.type; activeGhost = createGhost(type); function onMove(ev){ activeGhost.style.left = (ev.clientX - 24) + 'px'; activeGhost.style.top = (ev.clientY - 24) + 'px'; } function onUp(ev){ document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); if(activeGhost){ var rect = canvas.getBoundingClientRect(); if(ev.clientX >= rect.left && ev.clientX <= rect.right && ev.clientY >= rect.top && ev.clientY <= rect.bottom){ var pctPos = screenToPercent(ev.clientX, ev.clientY); var nid = 'ic_' + (Date.now()) + '_' + Math.floor(Math.random()*1000); maps.icons.push({ id: nid, type: type, x: pctPos.x, y: pctPos.y, equipment_id: null, label: null }); renderMaps(); saveMaps(); showToast('Placed'); } activeGhost.remove(); activeGhost = null; } document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp); });
+  
+  // after placing, select the last created icon for quick linking
+  function selectLastPlaced(){ if(maps.icons && maps.icons.length){ var ic = maps.icons[maps.icons.length - 1]; var el = mapInner.querySelector('.map-icon[data-id="' + ic.id + '"]'); if(el) selectIcon(ic, el); } }
 
   // Canvas pan & pinch-zoom
   var pointerState = { pointers: {}, lastPan: null, pinch: null };
@@ -145,6 +166,12 @@
 
   // Save maps to server
   function saveMaps(){ fetch('/api/deploy/office/' + encodeURIComponent(office) + '/map', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(maps) }).then(function(r){ if(r.ok) showToast('Saved'); else showToast('Save failed'); }).catch(function(){ showToast('Save failed'); }); }
+
+  // Click on deployed list to link selected icon to that equipment/unit
+  var deployed = document.getElementById('deployedList');
+  if(deployed){
+    deployed.addEventListener('click', function(ev){ var item = ev.target.closest && ev.target.closest('[data-eid]'); if(!item) return; var eid = item.dataset.eid; var ueid = item.dataset.ueid; var user = item.dataset.user; if(!selectedIcon){ showToast('Select or create an icon first'); return; } selectedIcon.equipment_id = eid; if(ueid) selectedIcon.linked_unit = 'ue_' + ueid; if(user) selectedIcon.assigned_user = user; selectedIcon.label = item.innerText.trim(); saveMaps(); renderMaps(); showToast('Linked'); });
+  }
 
   // click outside to remove tiny panels
   document.addEventListener('click', function(ev){ if(!ev.target.closest('.tiny-panel')){ document.querySelectorAll('.tiny-panel').forEach(function(n){ n.remove(); }); } });

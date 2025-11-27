@@ -786,6 +786,12 @@ get '/deploy/office/:slug/map' do
     if @office_equipments.empty?
       @office_equipments = Equipment.where("LOWER(location) LIKE ?", "%#{slug.downcase}%").order(:name).limit(200)
     end
+    # Also include any assigned user_equipment units whose parent equipment location matches this office
+    begin
+      @office_assigned_units = UserEquipment.joins(:equipment, :user).where(active: true).where("LOWER(equipments.location) LIKE ?", "%#{slug.downcase}%").select('user_equipments.*, equipments.name as equipment_name, users.username as assigned_username')
+    rescue => _e2
+      @office_assigned_units = []
+    end
   rescue => _e
     @office_equipments = []
   end
