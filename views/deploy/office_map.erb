@@ -1,8 +1,8 @@
 <style>
-  .office-map-wrap { display:flex; gap:20px; align-items:flex-start }
-  .map-canvas { background:#e9e9e9; width:100%; height:560px; border-radius:18px; position:relative; overflow:hidden; border:8px solid rgba(0,0,0,0.04) }
+  .office-map-wrap { display:flex; gap:12px; align-items:stretch }
+  .map-canvas { background:#e9e9e9; width:100%; height:calc(100vh - 220px); min-height:420px; border-radius:12px; position:relative; overflow:hidden; border:6px solid rgba(0,0,0,0.04) }
   .office-pill { display:inline-block; background:#4b5563; color:#fff; padding:12px 28px; border-radius:30px; font-weight:700; margin-bottom:12px }
-  .toolbar { width:88px; background:rgba(0,0,0,0.06); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:12px; align-items:center }
+  .toolbar { width:72px; background:rgba(0,0,0,0.06); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:12px; align-items:center }
   .tool-icon { width:48px; height:48px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; cursor:grab; box-shadow:0 6px 18px rgba(0,0,0,0.08) }
   .map-icon { position:absolute; width:40px; height:40px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.12); transform:translate(-50%,-50%); }
   .map-icon.assigned { border:3px solid #57a773 }
@@ -24,7 +24,7 @@
       <div id="mapOverlay" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; color:#777">Drop icons here to place equipment</div>
     </div>
   </div>
-  <aside style="width:200px">
+  <aside style="width:180px; max-width:220px">
     <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px"><strong>Available devices</strong></div>
     <div class="toolbar" id="toolbar">
       <% # Build palette from unique categories of equipments for this office %>

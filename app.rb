@@ -780,7 +780,12 @@ get '/deploy/office/:slug/map' do
   @office_slug = params[:slug].to_s
   # Gather equipments relevant to this office: equipments with matching location
   begin
-    @office_equipments = Equipment.where(location: @office_slug).order(:name).limit(200)
+    slug = @office_slug.to_s.strip
+    # Try exact (case-insensitive) match first, then fallback to partial LIKE
+    @office_equipments = Equipment.where("LOWER(location) = ?", slug.downcase).order(:name).limit(200)
+    if @office_equipments.empty?
+      @office_equipments = Equipment.where("LOWER(location) LIKE ?", "%#{slug.downcase}%").order(:name).limit(200)
+    end
   rescue => _e
     @office_equipments = []
   end
