@@ -162,5 +162,77 @@
         btn.addEventListener('click', function(){ if(sidebar.classList.contains('open')) closeSidebar(); else openSidebar(); });
       })();
     </script>
+        <!-- Global confirmation modal (used by forms/links with `data-confirm`) -->
+        <div id="globalConfirmModal" style="display:none; position:fixed; inset:0; align-items:center; justify-content:center; z-index:4000">
+          <div style="width:520px; max-width:96%; background:var(--card); border-radius:8px; padding:18px; box-shadow:0 30px 80px rgba(0,0,0,0.6);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+              <h3 id="globalConfirmTitle" style="margin:0">Please confirm</h3>
+              <button id="globalConfirmClose" class="btn-secondary">Cancel</button>
+            </div>
+            <div id="globalConfirmBody" style="color:var(--muted); margin-bottom:16px">Are you sure?</div>
+            <div style="display:flex; gap:10px; justify-content:flex-end">
+              <button id="globalConfirmNo" class="btn-secondary">No</button>
+              <button id="globalConfirmYes" class="btn-cta">Yes</button>
+            </div>
+          </div>
+          <div id="globalConfirmBackdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45)"></div>
+        </div>
+
+        <script>
+          (function(){
+            var modal = document.getElementById('globalConfirmModal');
+            var body = document.getElementById('globalConfirmBody');
+            var btnYes = document.getElementById('globalConfirmYes');
+            var btnNo = document.getElementById('globalConfirmNo');
+            var btnClose = document.getElementById('globalConfirmClose');
+            var backdrop = document.getElementById('globalConfirmBackdrop');
+            var pendingAction = null;
+
+            function openConfirm(message, onConfirm){
+              body.innerHTML = message || 'Are you sure?';
+              pendingAction = onConfirm || null;
+              modal.style.display = 'flex';
+              setTimeout(function(){ try{ btnYes.focus(); }catch(e){} }, 60);
+            }
+            function closeConfirm(){ modal.style.display = 'none'; pendingAction = null; }
+
+            // Intercept form submits with data-confirm attribute
+            document.addEventListener('submit', function(ev){
+              var f = ev.target;
+              if(f && f.matches && f.matches('[data-confirm]')){
+                ev.preventDefault();
+                var msg = f.getAttribute('data-confirm') || 'Are you sure?';
+                openConfirm(msg, function(){ f.submit(); });
+              }
+            }, true);
+
+            // Intercept clicks on links/buttons with data-confirm
+            document.addEventListener('click', function(ev){
+              var t = ev.target.closest && ev.target.closest('[data-confirm]');
+              if(!t) return;
+              // ignore if inside a form submit that will be handled by submit listener
+              if(t.tagName === 'FORM') return;
+              ev.preventDefault();
+              var msg = t.getAttribute('data-confirm') || 'Are you sure?';
+              openConfirm(msg, function(){
+                // If the element is inside a form, submit that form
+                var f = t.closest('form');
+                if(f) return f.submit();
+                // If it's a link, follow href
+                if(t.tagName === 'A' && t.href){ window.location = t.href; return; }
+                // If it's a button with formaction, create a temporary form
+                if((t.tagName === 'BUTTON' || t.tagName === 'INPUT') && t.type === 'submit'){
+                  var form = t.closest('form'); if(form) return form.submit();
+                }
+              });
+            });
+
+            btnYes.addEventListener('click', function(){ if(pendingAction) pendingAction(); closeConfirm(); });
+            btnNo.addEventListener('click', function(ev){ ev.preventDefault(); closeConfirm(); });
+            btnClose.addEventListener('click', function(ev){ ev.preventDefault(); closeConfirm(); });
+            backdrop.addEventListener('click', closeConfirm);
+            document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') closeConfirm(); });
+          })();
+        </script>
   </body>
 </html>

@@ -57,11 +57,11 @@
         </td>
         <td style="padding:10px; border-bottom:1px solid rgba(255,255,255,0.05)">
           <% if user.respond_to?(:must_change_password) && user.must_change_password %>
-            <form method="post" action="/users/<%= user.id %>/force_reset" style="display:inline">
+            <form method="post" action="/users/<%= user.id %>/force_reset" style="display:inline" data-confirm="Force a password reset for user <%= h(user.username) %>? This will require them to change password at next login.">
               <button type="submit" class="btn-secondary" style="padding:6px 8px">Force reset</button>
             </form>
           <% else %>
-            <form method="post" action="/users/<%= user.id %>/force_reset" style="display:inline">
+            <form method="post" action="/users/<%= user.id %>/force_reset" style="display:inline" data-confirm="Require password change for user <%= h(user.username) %>?">
               <button type="submit" class="btn-secondary" style="padding:6px 8px">Require change</button>
             </form>
           <% end %>

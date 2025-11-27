@@ -125,9 +125,9 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 10l5-5 5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </a>
               <% if current_user && current_user.super_admin? %>
-                <form action="/equipments/<%= e.id %>" method="post" style="display:inline-block; margin-left:6px" onsubmit="return confirm('Permanently delete this equipment? This action cannot be undone.');">
+                <form action="/equipments/<%= e.id %>" method="post" style="display:inline-block; margin-left:6px" class="delete-form" data-item-name="<%= h(e.name) %>">
                   <input type="hidden" name="_method" value="DELETE">
-                  <button type="submit" title="Delete" class="action-icon icon-delete" style="border:none; background:transparent; cursor:pointer"> 
+                  <button type="submit" title="Delete" class="action-icon icon-delete delete-trigger" style="border:none; background:transparent; cursor:pointer"> 
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 6h18" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 6v12a2 2 0 002 2h4a2 2 0 002-2V6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11v6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   </button>
                 </form>
@@ -218,6 +218,64 @@
 
   // close when clicking backdrop
   document.getElementById('eh_backdrop')?.addEventListener('click', function(){ document.getElementById('equipmentHistoryModal').style.display='none'; });
+</script>
+
+<!-- Delete confirmation modal -->
+<div id="deleteConfirmModal" style="display:none; position:fixed; inset:0; align-items:center; justify-content:center; z-index:3000">
+  <div style="width:520px; max-width:96%; background:var(--card); border-radius:8px; padding:18px; box-shadow:0 30px 80px rgba(0,0,0,0.6);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+      <h3 style="margin:0">Confirm Delete</h3>
+      <button id="deleteModalClose" class="btn-secondary">Cancel</button>
+    </div>
+    <div id="deleteModalBody" style="color:var(--muted); margin-bottom:16px">Are you sure you want to delete this item?</div>
+    <div style="display:flex; gap:10px; justify-content:flex-end">
+      <button id="deleteCancel" class="btn-secondary">No, Cancel</button>
+      <button id="deleteConfirm" class="btn-cta">Yes, Delete</button>
+    </div>
+  </div>
+  <div id="deleteBackdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45)"></div>
+</div>
+
+<script>
+  (function(){
+    var modal = document.getElementById('deleteConfirmModal');
+    var backdrop = document.getElementById('deleteBackdrop');
+    var body = document.getElementById('deleteModalBody');
+    var btnConfirm = document.getElementById('deleteConfirm');
+    var btnClose = document.getElementById('deleteModalClose');
+    var btnCancel = document.getElementById('deleteCancel');
+    var pendingForm = null;
+
+    function openModal(form){
+      var name = form.getAttribute('data-item-name') || 'this item';
+      body.innerHTML = 'Are you sure you want to delete <strong style="color:var(--danger);">' + (name) + '</strong>? This action cannot be undone.';
+      pendingForm = form;
+      modal.style.display = 'flex';
+      setTimeout(function(){ try{ btnConfirm.focus(); }catch(e){} }, 80);
+    }
+
+    function closeModal(){ modal.style.display = 'none'; pendingForm = null; }
+
+    document.addEventListener('click', function(ev){
+      var tf = ev.target.closest('.delete-trigger');
+      if(tf){
+        ev.preventDefault();
+        var form = tf.closest('.delete-form');
+        if(form) openModal(form);
+      }
+    });
+
+    btnConfirm.addEventListener('click', function(){
+      if(!pendingForm) return closeModal();
+      // submit the form programmatically
+      pendingForm.submit();
+    });
+    btnClose.addEventListener('click', function(ev){ ev.preventDefault(); closeModal(); });
+    btnCancel.addEventListener('click', function(ev){ ev.preventDefault(); closeModal(); });
+    backdrop.addEventListener('click', closeModal);
+    // close on ESC
+    document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') closeModal(); });
+  })();
 </script>
 
 <!-- DataTables and jQuery from CDN -->

@@ -155,16 +155,16 @@
               <% end %>
               <% if current_user && (current_user.semi_admin? || current_user.super_admin?) %>
                 <% if r.status != 'pending_return' && r.returned_at.nil? %>
-                  <form action="/requests/<%= r.id %>/return" method="post" style="display:inline"><button class="btn-cta" type="submit"><span class="btn-icon">✓</span>Mark Returned</button></form>
+                  <form action="/requests/<%= r.id %>/return" method="post" style="display:inline" data-confirm="Mark Request #<%= r.id %> (Equipment: <%= h(r.equipment&.name || 'unknown') %>) as returned?"> <button class="btn-cta" type="submit"><span class="btn-icon">✓</span>Mark Returned</button></form>
                 <% end %>
               <% end %>
 
               <% if current_user && current_user.super_admin? %>
                 <% if r.status == 'pending_return' %>
-                  <form action="/requests/<%= r.id %>/confirm_return" method="post" style="display:inline; margin-left:6px">
+                  <form action="/requests/<%= r.id %>/confirm_return" method="post" style="display:inline; margin-left:6px" data-confirm="Confirm return for Request #<%= r.id %> (Equipment: <%= h(r.equipment&.name || 'unknown') %>)?"> 
                     <button class="btn-primary" type="submit">Confirm Return</button>
                   </form>
-                  <form action="/requests/<%= r.id %>/reject_return" method="post" style="display:inline; margin-left:6px">
+                  <form action="/requests/<%= r.id %>/reject_return" method="post" style="display:inline; margin-left:6px" data-confirm="Reject return for Request #<%= r.id %> (Equipment: <%= h(r.equipment&.name || 'unknown') %>)?"> 
                     <button class="btn-secondary" type="submit" style="background:transparent;border:1px solid rgba(255,107,107,0.12);color:var(--danger)">Reject</button>
                   </form>
                 <% else %>
@@ -172,7 +172,7 @@
                 <% end %>
               <% end %>
               <div id="status_form_<%= r.id %>" style="display:none;margin-top:8px;padding:8px;background:rgba(255,255,255,0.02);border-radius:6px">
-                <form action="/requests/<%= r.id %>/status" method="post">
+                <form action="/requests/<%= r.id %>/status" method="post" data-confirm="Change status for Request #<%= r.id %>? This will update equipment status.">
                   <div style="display:flex;gap:6px;flex-direction:column">
                     <select name="new_status">
                       <option value="working">working</option>
