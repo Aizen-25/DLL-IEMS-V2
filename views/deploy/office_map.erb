@@ -1,0 +1,140 @@
+<style>
+  .office-map-wrap { display:flex; gap:20px; align-items:flex-start }
+  .map-canvas { background:#e9e9e9; width:100%; height:560px; border-radius:18px; position:relative; overflow:hidden; border:8px solid rgba(0,0,0,0.04) }
+  .office-pill { display:inline-block; background:#4b5563; color:#fff; padding:12px 28px; border-radius:30px; font-weight:700; margin-bottom:12px }
+  .toolbar { width:88px; background:rgba(0,0,0,0.06); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:12px; align-items:center }
+  .tool-icon { width:48px; height:48px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; cursor:grab; box-shadow:0 6px 18px rgba(0,0,0,0.08) }
+  .map-icon { position:absolute; width:40px; height:40px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.12); transform:translate(-50%,-50%); }
+  .map-icon.assigned { border:3px solid #57a773 }
+  .tiny-panel { position:absolute; background:#fff; border-radius:8px; padding:8px; box-shadow:0 12px 40px rgba(0,0,0,0.2); z-index:4000 }
+  .toast { position:fixed; right:18px; bottom:18px; background:#111; color:#fff; padding:10px 14px; border-radius:8px; opacity:0.95 }
+</style>
+
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+  <h2 style="margin:0">Office virtualization</h2>
+  <div>
+    <span class="office-pill"><%= h @office_slug %></span>
+  </div>
+</div>
+
+<div class="office-map-wrap">
+  <div style="flex:1">
+    <div id="mapCanvas" class="map-canvas" role="application" aria-label="Office map">
+      <div id="mapOverlay" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; color:#777">Drop icons here to place equipment</div>
+    </div>
+  </div>
+  <aside style="width:200px">
+    <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px"><strong>Available devices</strong></div>
+    <div class="toolbar" id="toolbar">
+      <% # Build palette from unique categories of equipments for this office %>
+      <% cats = @office_equipments.map(&:category).compact.uniq %>
+      <% if cats.empty? %>
+        <div style="color:var(--muted)">No devices found for this office</div>
+      <% else %>
+        <% cats.each_with_index do |c,i| %>
+          <div class="tool-icon" draggable="true" data-type="<%= h c %>" title="<%= h c %>"><span style="font-size:12px"><%= h c[0,2].upcase %></span></div>
+        <% end %>
+      <% end %>
+    </div>
+    <div style="margin-top:14px">
+      <strong>Deployed equipment</strong>
+      <div id="deployedList" style="margin-top:8px; max-height:380px; overflow:auto; background:transparent; padding-right:6px">
+        <% @office_equipments.each do |eq| %>
+          <div class="muted" data-eid="<%= eq.id %>"><%= h(eq.name) %> <span style="color:var(--muted)">(<%= h eq.serial_number %>)</span></div>
+        <% end %>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div id="toast" style="display:none" class="toast">Saved</div>
+
+<script>
+(function(){
+  var canvas = document.getElementById('mapCanvas');
+  var toolbar = document.getElementById('toolbar');
+  var office = "<%= j @office_slug %>";
+  var maps = { icons: [] };
+  var selectedIcon = null;
+
+  function showToast(msg){ var t = document.getElementById('toast'); t.innerText = msg; t.style.display='block'; setTimeout(function(){ t.style.display='none'; }, 1500); }
+
+  function pct(x, total){ return Math.round((x/total)*10000)/100; }
+  function px(pct, total){ return (pct/100)*total; }
+
+  function renderMaps(){
+    // clear icons
+    canvas.querySelectorAll('.map-icon').forEach(function(n){ n.remove(); });
+    maps.icons.forEach(function(ic){
+      var el = document.createElement('div');
+      el.className = 'map-icon' + (ic.equipment_id ? ' assigned' : '');
+      el.style.left = ic.x + '%';
+      el.style.top = ic.y + '%';
+      el.dataset.id = ic.id;
+      el.dataset.type = ic.type;
+      el.title = ic.label || (ic.type || 'device');
+      el.innerText = (ic.type || '').substr(0,2).toUpperCase();
+      el.addEventListener('click', function(ev){ ev.stopPropagation(); openIconPanel(ic, el); });
+      // allow dragging to reposition
+      el.draggable = true;
+      el.addEventListener('dragstart', function(e){ e.dataTransfer.setData('text/plain', JSON.stringify({ dragging: ic.id })); });
+      canvas.appendChild(el);
+    });
+  }
+
+  function openIconPanel(ic, el){
+    // remove existing tiny panels
+    document.querySelectorAll('.tiny-panel').forEach(function(n){ n.remove(); });
+    var rect = el.getBoundingClientRect();
+    var panel = document.createElement('div'); panel.className='tiny-panel';
+    panel.style.left = (rect.right + 8) + 'px';
+    panel.style.top = (rect.top) + 'px';
+    var html = '';
+    html += '<div style="font-weight:700;margin-bottom:6px">' + (ic.label || (ic.type||'')) + '</div>';
+    html += '<div style="margin-bottom:6px"><label>Link equipment:</label><br><input id="link_input" type="text" placeholder="serial or name" style="width:240px;padding:6px;border:1px solid #ccc;border-radius:6px"></div>';
+    html += '<div style="display:flex;gap:8px;justify-content:flex-end"><button id="unlink_btn" class="btn-secondary">Unlink</button><button id="save_btn" class="btn-cta">Save</button></div>';
+    panel.innerHTML = html;
+    document.body.appendChild(panel);
+    document.getElementById('link_input').focus();
+    document.getElementById('save_btn').addEventListener('click', function(){
+      var v = document.getElementById('link_input').value.trim();
+      if(!v){ showToast('Enter serial or name to link'); return; }
+      // find equipment by serial or name in deployedList
+      var found = Array.from(document.querySelectorAll('#deployedList [data-eid]')).map(function(n){ return { id: n.dataset.eid, text: n.innerText }; }).filter(function(x){ return x.text.toLowerCase().indexOf(v.toLowerCase()) !== -1; });
+      if(found.length>0){ ic.equipment_id = found[0].id; ic.label = found[0].text; saveMaps(); renderMaps(); panel.remove(); showToast('Linked'); }
+      else { showToast('No matching equipment found'); }
+    });
+    document.getElementById('unlink_btn').addEventListener('click', function(){ ic.equipment_id = null; ic.label = null; saveMaps(); renderMaps(); panel.remove(); showToast('Unlinked'); });
+  }
+
+  // Load existing map
+  fetch('/api/deploy/office/' + encodeURIComponent(office) + '/map').then(function(r){ return r.json(); }).then(function(d){ maps = d || { icons: [] }; renderMaps(); }).catch(function(){ maps = { icons: [] }; renderMaps(); });
+
+  // Toolbar drag
+  toolbar.addEventListener('dragstart', function(e){ var t = e.target; if(t && t.dataset && t.dataset.type){ e.dataTransfer.setData('text/plain', JSON.stringify({ newType: t.dataset.type })); } });
+
+  // Canvas drop
+  canvas.addEventListener('dragover', function(e){ e.preventDefault(); });
+  canvas.addEventListener('drop', function(e){ e.preventDefault(); var data = e.dataTransfer.getData('text/plain'); try{ var obj = JSON.parse(data); var rect = canvas.getBoundingClientRect(); if(obj.newType){ var xpct = pct(e.clientX - rect.left, rect.width); var ypct = pct(e.clientY - rect.top, rect.height); var nid = 'ic_' + (Date.now()) + '_' + Math.floor(Math.random()*1000);
+        maps.icons.push({ id: nid, type: obj.newType, x: xpct, y: ypct, equipment_id: null, label: null }); renderMaps(); saveMaps(); showToast('Placed'); }
+        else if(obj.dragging){ // reposition
+          var id = obj.dragging; var rect = canvas.getBoundingClientRect(); var ix = pct(e.clientX - rect.left, rect.width); var iy = pct(e.clientY - rect.top, rect.height);
+          var ic = maps.icons.find(function(x){ return x.id == id }); if(ic){ ic.x = ix; ic.y = iy; renderMaps(); saveMaps(); showToast('Moved'); }
+        }
+      }catch(err){ console.error(err); }
+  });
+
+  // Allow reposition by dropping icons outside toolbar: listen for dragend on document
+  document.addEventListener('dragend', function(e){ /* handled by drop logic */ });
+
+  // Save maps to server
+  function saveMaps(){
+    fetch('/api/deploy/office/' + encodeURIComponent(office) + '/map', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(maps) })
+    .then(function(r){ if(r.ok) showToast('Saved'); else showToast('Save failed'); }).catch(function(){ showToast('Save failed'); });
+  }
+
+  // click outside to remove tiny panels
+  document.addEventListener('click', function(ev){ if(!ev.target.closest('.tiny-panel')){ document.querySelectorAll('.tiny-panel').forEach(function(n){ n.remove(); }); } });
+
+})();
+</script>

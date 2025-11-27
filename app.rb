@@ -57,6 +57,8 @@ set :session_secret, secret
 LEGACY_CONFIG_PATH = File.join(Dir.pwd, 'tmp', 'legacy_migration.yml')
 LEGACY_EXPORT_DIR = File.join(Dir.pwd, 'tmp', 'db_exports')
 FileUtils.mkdir_p(LEGACY_EXPORT_DIR) unless Dir.exist?(LEGACY_EXPORT_DIR)
+OFFICE_MAPS_PATH = File.join(Dir.pwd, 'tmp', 'office_maps.yml')
+FileUtils.mkdir_p(File.dirname(OFFICE_MAPS_PATH)) unless Dir.exist?(File.dirname(OFFICE_MAPS_PATH))
 
 def read_legacy_config
   if File.exist?(LEGACY_CONFIG_PATH)
@@ -196,6 +198,21 @@ def perform_auto_export(prefix = 'auto_export')
   rescue => e
     return [false, "Failed to run automatic backup: #{e.message}"]
   end
+end
+
+def read_office_maps
+  if File.exist?(OFFICE_MAPS_PATH)
+    YAML.load_file(OFFICE_MAPS_PATH) || {}
+  else
+    {}
+  end
+rescue => _e
+  {}
+end
+
+def write_office_maps(hash)
+  FileUtils.mkdir_p(File.dirname(OFFICE_MAPS_PATH))
+  File.write(OFFICE_MAPS_PATH, hash.to_yaml)
 end
 
 def check_and_trigger_auto_export
@@ -755,6 +772,47 @@ end
 get '/requests/new' do
   @equipments = Equipment.order(:name)
   erb :'requests_new'
+end
+
+# Office Virtualization map view
+get '/deploy/office/:slug/map' do
+  # Allow view for logged-in users; editing controlled in client/server
+  @office_slug = params[:slug].to_s
+  # Gather equipments relevant to this office: equipments with matching location
+  begin
+    @office_equipments = Equipment.where(location: @office_slug).order(:name).limit(200)
+  rescue => _e
+    @office_equipments = []
+  end
+  erb :'deploy/office_map'
+end
+
+# API: load map JSON for an office
+get '/api/deploy/office/:slug/map' do
+  content_type :json
+  slug = params[:slug].to_s
+  maps = read_office_maps
+  map = maps[slug] || { 'icons' => [] }
+  map.to_json
+end
+
+# API: save map JSON for an office
+post '/api/deploy/office/:slug/map' do
+  require_at_least_semi!
+  slug = params[:slug].to_s
+  begin
+    payload = request.body.read
+    data = JSON.parse(payload) rescue nil
+    halt 400, { error: 'invalid json' }.to_json unless data.is_a?(Hash)
+    maps = read_office_maps
+    maps[slug] = data
+    write_office_maps(maps)
+    status 200
+    { ok: true }.to_json
+  rescue => e
+    status 500
+    { error: e.message }.to_json
+  end
 end
 
 post '/requests' do
