@@ -87,6 +87,9 @@
       }
       .btn-cta:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(255,209,102,0.18); }
       .btn-icon { display:inline-block; width:18px; text-align:center; margin-right:8px; font-size:14px; line-height:1 }
+      /* Small inline spinner for modal actions */
+      .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,0.18); border-top-color: #fff; border-radius:50%; margin-right:8px; vertical-align:middle; animation: spin 800ms linear infinite }
+      @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
       /* Layout for action buttons to prevent accidental misclicks */
       .action-buttons { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
       .action-buttons .btn-cta, .action-buttons .btn-secondary, .action-buttons form { margin: 0 }
@@ -249,6 +252,8 @@
             function openConfirm(message, onConfirm){
               body.innerHTML = message || 'Are you sure?';
               pendingAction = onConfirm || null;
+              // restore Yes button state
+              try{ btnYes.disabled = false; btnYes.removeAttribute('aria-busy'); btnYes.innerHTML = originalYesHTML; }catch(e){}
               modal.style.display = 'flex';
               setTimeout(function(){ try{ btnYes.focus(); }catch(e){} }, 60);
             }
@@ -301,7 +306,18 @@
               });
             });
 
-            btnYes.addEventListener('click', function(){ if(pendingAction) pendingAction(); closeConfirm(); });
+            btnYes.addEventListener('click', function(){
+              if(!pendingAction) return closeConfirm();
+              // disable Yes button and show spinner to prevent double-submit
+              try{
+                btnYes.disabled = true;
+                btnYes.setAttribute('aria-busy','true');
+                btnYes.innerHTML = '<span class="spinner" aria-hidden="true"></span>Working...';
+              }catch(e){}
+              try{ pendingAction(); }catch(e){}
+              // leave modal open until navigation/submission occurs; ensure cleanup fallback
+              setTimeout(function(){ closeConfirm(); }, 1200);
+            });
             btnNo.addEventListener('click', function(ev){ ev.preventDefault(); closeConfirm(); });
             btnClose.addEventListener('click', function(ev){ ev.preventDefault(); closeConfirm(); });
             backdrop.addEventListener('click', closeConfirm);
