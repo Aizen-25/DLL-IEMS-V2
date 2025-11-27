@@ -255,12 +255,22 @@
             function closeConfirm(){ modal.style.display = 'none'; pendingAction = null; }
 
             // Intercept form submits with data-confirm attribute
+            // When we programmatically submit after confirming, set a skip flag so
+            // the submit handler does not re-open the modal and block the action.
             document.addEventListener('submit', function(ev){
               var f = ev.target;
               if(f && f.matches && f.matches('[data-confirm]')){
+                // Allow programmatic submits that set the skip flag
+                try{
+                  if(f.dataset && f.dataset.skipConfirm === '1'){
+                    // remove the flag so subsequent submits work normally
+                    delete f.dataset.skipConfirm;
+                    return; // allow submit to proceed
+                  }
+                }catch(e){}
                 ev.preventDefault();
                 var msg = f.getAttribute('data-confirm') || 'Are you sure?';
-                openConfirm(msg, function(){ f.submit(); });
+                openConfirm(msg, function(){ try{ f.dataset.skipConfirm = '1'; }catch(e){}; f.submit(); });
               }
             }, true);
 
@@ -273,14 +283,20 @@
               ev.preventDefault();
               var msg = t.getAttribute('data-confirm') || 'Are you sure?';
               openConfirm(msg, function(){
-                // If the element is inside a form, submit that form
+                // If the element is inside a form, submit that form (use skip flag)
                 var f = t.closest('form');
-                if(f) return f.submit();
-                // If it's a link, follow href
-                if(t.tagName === 'A' && t.href){ window.location = t.href; return; }
-                // If it's a button with formaction, create a temporary form
-                if((t.tagName === 'BUTTON' || t.tagName === 'INPUT') && t.type === 'submit'){
-                  var form = t.closest('form'); if(form) return form.submit();
+                if(f){ try{ f.dataset.skipConfirm = '1'; }catch(e){}; return f.submit(); }
+                // If it's a link, follow href. If it declares a data-method (non-GET), create and submit a form
+                if(t.tagName === 'A' && t.href){
+                  var method = (t.getAttribute('data-method') || 'get').toLowerCase();
+                  if(method && method !== 'get'){
+                    var tf = document.createElement('form'); tf.method = method; tf.action = t.href; tf.style.display='none'; document.body.appendChild(tf); try{ tf.dataset.skipConfirm = '1'; }catch(e){}; return tf.submit();
+                  }
+                  window.location = t.href; return;
+                }
+                // If it's a button/input submit outside of a form, try to find a formaction attribute
+                if((t.tagName === 'BUTTON' || t.tagName === 'INPUT') && (t.type === 'submit' || t.getAttribute('formaction'))){
+                  var form = t.closest('form'); if(form){ try{ form.dataset.skipConfirm = '1'; }catch(e){}; return form.submit(); }
                 }
               });
             });
