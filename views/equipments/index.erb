@@ -241,62 +241,7 @@
 </script>
 
 <!-- Delete confirmation modal -->
-<div id="deleteConfirmModal" style="display:none; position:fixed; inset:0; align-items:center; justify-content:center; z-index:3000">
-  <div style="width:520px; max-width:96%; background:var(--card); border-radius:8px; padding:18px; box-shadow:0 30px 80px rgba(0,0,0,0.6);">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
-      <h3 style="margin:0">Confirm Delete</h3>
-      <button id="deleteModalClose" class="btn-secondary">Cancel</button>
-    </div>
-    <div id="deleteModalBody" style="color:var(--muted); margin-bottom:16px">Are you sure you want to delete this item?</div>
-    <div style="display:flex; gap:10px; justify-content:flex-end">
-      <button id="deleteCancel" class="btn-secondary">No, Cancel</button>
-      <button id="deleteConfirm" class="btn-cta">Yes, Delete</button>
-    </div>
-  </div>
-  <div id="deleteBackdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.45)"></div>
-</div>
-
-<script>
-  (function(){
-    var modal = document.getElementById('deleteConfirmModal');
-    var backdrop = document.getElementById('deleteBackdrop');
-    var body = document.getElementById('deleteModalBody');
-    var btnConfirm = document.getElementById('deleteConfirm');
-    var btnClose = document.getElementById('deleteModalClose');
-    var btnCancel = document.getElementById('deleteCancel');
-    var pendingForm = null;
-
-    function openModal(form){
-      var name = form.getAttribute('data-item-name') || 'this item';
-      body.innerHTML = 'Are you sure you want to delete <strong style="color:var(--danger);">' + (name) + '</strong>? This action cannot be undone.';
-      pendingForm = form;
-      modal.style.display = 'flex';
-      setTimeout(function(){ try{ btnConfirm.focus(); }catch(e){} }, 80);
-    }
-
-    function closeModal(){ modal.style.display = 'none'; pendingForm = null; }
-
-    document.addEventListener('click', function(ev){
-      var tf = ev.target.closest('.delete-trigger');
-      if(tf){
-        ev.preventDefault();
-        var form = tf.closest('.delete-form');
-        if(form) openModal(form);
-      }
-    });
-
-    btnConfirm.addEventListener('click', function(){
-      if(!pendingForm) return closeModal();
-      // submit the form programmatically
-      pendingForm.submit();
-    });
-    btnClose.addEventListener('click', function(ev){ ev.preventDefault(); closeModal(); });
-    btnCancel.addEventListener('click', function(ev){ ev.preventDefault(); closeModal(); });
-    backdrop.addEventListener('click', closeModal);
-    // close on ESC
-    document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') closeModal(); });
-  })();
-</script>
+<!-- Delete confirmation removed: delete forms now submit directly -->
 
 <!-- DataTables and jQuery from CDN -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
