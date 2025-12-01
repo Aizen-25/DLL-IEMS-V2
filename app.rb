@@ -57,8 +57,8 @@ set :session_secret, secret
 LEGACY_CONFIG_PATH = File.join(Dir.pwd, 'tmp', 'legacy_migration.yml')
 LEGACY_EXPORT_DIR = File.join(Dir.pwd, 'tmp', 'db_exports')
 FileUtils.mkdir_p(LEGACY_EXPORT_DIR) unless Dir.exist?(LEGACY_EXPORT_DIR)
-OFFICE_MAPS_PATH = File.join(Dir.pwd, 'tmp', 'office_maps.yml')
-FileUtils.mkdir_p(File.dirname(OFFICE_MAPS_PATH)) unless Dir.exist?(File.dirname(OFFICE_MAPS_PATH))
+# Office virtualization storage removed. New features will provide
+# their own storage/handlers.
 
 def read_legacy_config
   if File.exist?(LEGACY_CONFIG_PATH)
@@ -200,20 +200,8 @@ def perform_auto_export(prefix = 'auto_export')
   end
 end
 
-def read_office_maps
-  if File.exist?(OFFICE_MAPS_PATH)
-    YAML.load_file(OFFICE_MAPS_PATH) || {}
-  else
-    {}
-  end
-rescue => _e
-  {}
-end
-
-def write_office_maps(hash)
-  FileUtils.mkdir_p(File.dirname(OFFICE_MAPS_PATH))
-  File.write(OFFICE_MAPS_PATH, hash.to_yaml)
-end
+# Office virtualization helpers removed. New features will implement
+# map storage and retrieval when ready.
 
 def check_and_trigger_auto_export
   cfg = read_legacy_config
@@ -774,57 +762,10 @@ get '/requests/new' do
   erb :'requests_new'
 end
 
-# Office Virtualization map view
-get '/deploy/office/:slug/map' do
-  # Allow view for logged-in users; editing controlled in client/server
-  @office_slug = params[:slug].to_s
-  # Gather equipments relevant to this office: equipments with matching location
-  begin
-    slug = @office_slug.to_s.strip
-    # Try exact (case-insensitive) match first, then fallback to partial LIKE
-    @office_equipments = Equipment.where("LOWER(location) = ?", slug.downcase).order(:name).limit(200)
-    if @office_equipments.empty?
-      @office_equipments = Equipment.where("LOWER(location) LIKE ?", "%#{slug.downcase}%").order(:name).limit(200)
-    end
-    # Also include any assigned user_equipment units whose parent equipment location matches this office
-    begin
-      @office_assigned_units = UserEquipment.joins(:equipment, :user).where(active: true).where("LOWER(equipments.location) LIKE ?", "%#{slug.downcase}%").select('user_equipments.*, equipments.name as equipment_name, users.username as assigned_username')
-    rescue => _e2
-      @office_assigned_units = []
-    end
-  rescue => _e
-    @office_equipments = []
-  end
-  erb :'deploy/office_map'
-end
-
-# API: load map JSON for an office
-get '/api/deploy/office/:slug/map' do
-  content_type :json
-  slug = params[:slug].to_s
-  maps = read_office_maps
-  map = maps[slug] || { 'icons' => [] }
-  map.to_json
-end
-
-# API: save map JSON for an office
-post '/api/deploy/office/:slug/map' do
-  require_at_least_semi!
-  slug = params[:slug].to_s
-  begin
-    payload = request.body.read
-    data = JSON.parse(payload) rescue nil
-    halt 400, { error: 'invalid json' }.to_json unless data.is_a?(Hash)
-    maps = read_office_maps
-    maps[slug] = data
-    write_office_maps(maps)
-    status 200
-    { ok: true }.to_json
-  rescue => e
-    status 500
-    { error: e.message }.to_json
-  end
-end
+# Office virtualization routes removed.
+# The previous map view and API endpoints were intentionally removed
+# to make way for a redesigned implementation. Implement new routes
+# and handlers as part of the new feature work.
 
 post '/requests' do
   rq = Request.new(
