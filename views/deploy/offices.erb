@@ -1,0 +1,80 @@
+<style>
+  .deploy-wrap { padding:12px }
+  .office-select { padding:8px 10px; border-radius:6px; border:1px solid #d1d5db; width:320px }
+  .cards { display:flex; flex-wrap:wrap; gap:12px; margin-top:12px }
+  .card { background:#fff; border-radius:10px; padding:12px; width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.06) }
+  .card h3 { margin:0 0 6px 0; font-size:1rem }
+  .muted { color:var(--muted) }
+</style>
+
+<div class="deploy-wrap">
+  <h2>Office Deployments</h2>
+  <div style="margin-top:8px">
+    <label for="office_select"><strong>Select Office:</strong></label>
+    <div style="margin-top:6px">
+      <select id="office_select" class="office-select">
+        <option value="">-- choose an office --</option>
+      </select>
+      <button id="refresh_btn" class="btn-secondary" style="margin-left:8px">Refresh</button>
+    </div>
+  </div>
+
+  <div id="cards" class="cards" aria-live="polite"></div>
+</div>
+
+<script>
+  (function(){
+    var select = document.getElementById('office_select');
+    var cards = document.getElementById('cards');
+    var refresh = document.getElementById('refresh_btn');
+
+    function showToast(msg){ var t = document.getElementById('toast'); if(t){ t.innerText = msg; t.style.display='block'; setTimeout(function(){ t.style.display='none'; }, 1400); } }
+
+    function loadOffices(){
+      fetch('/api/deploy/offices').then(function(r){ return r.json(); }).then(function(d){
+        select.innerHTML = '<option value="">-- choose an office --</option>';
+        (d.offices || []).forEach(function(o){ var opt = document.createElement('option'); opt.value = o; opt.innerText = o; select.appendChild(opt); });
+      }).catch(function(){ showToast('Failed to load offices'); });
+    }
+
+    function renderEquipments(data){
+      cards.innerHTML = '';
+      var eqs = data.equipments || [];
+      var assigned = data.assigned_units || [];
+      if(eqs.length === 0 && assigned.length === 0){ cards.innerHTML = '<div class="muted">No deployments found for this office.</div>'; return; }
+
+      // Show assigned units first as cards grouped by equipment
+      assigned.forEach(function(u){
+        var c = document.createElement('div'); c.className='card';
+        c.innerHTML = '<h3>' + (u.equipment_name || 'Equipment') + '</h3>' +
+          '<div class="muted">Serial: ' + (u.serial || '—') + '</div>' +
+          '<div class="muted">Assigned to: ' + (u.assigned_username || '—') + '</div>' +
+          '<div style="margin-top:8px">Assigned at: ' + (u.assigned_at || '—') + '</div>';
+        cards.appendChild(c);
+      });
+
+      // Show standalone equipments
+      eqs.forEach(function(eq){
+        var c = document.createElement('div'); c.className='card';
+        c.innerHTML = '<h3>' + (eq.name || 'Unknown') + '</h3>' +
+          '<div class="muted">Model: ' + (eq.model || '—') + '</div>' +
+          '<div class="muted">Serial: ' + (eq.serial_number || '—') + '</div>' +
+          '<div style="margin-top:8px">Location: ' + (eq.location || '—') + '</div>';
+        cards.appendChild(c);
+      });
+    }
+
+    function loadForOffice(slug){
+      if(!slug || slug.trim()==='') { cards.innerHTML = ''; return; }
+      fetch('/api/deploy/office/' + encodeURIComponent(slug) + '/equipments').then(function(r){ return r.json(); }).then(function(d){ renderEquipments(d); }).catch(function(){ showToast('Failed to load office deployments'); });
+    }
+
+    select.addEventListener('change', function(e){ loadForOffice(e.target.value); });
+    refresh.addEventListener('click', loadOffices);
+
+    // initial load
+    loadOffices();
+  })();
+</script>
+
+<div id="toast" style="display:none" class="toast">Saved</div>

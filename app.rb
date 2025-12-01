@@ -767,6 +767,64 @@ end
 # to make way for a redesigned implementation. Implement new routes
 # and handlers as part of the new feature work.
 
+# New: Deploy offices index view
+get '/deploy' do
+  erb :'deploy/offices'
+end
+
+# API: list available offices (distinct locations)
+get '/api/deploy/offices' do
+  content_type :json
+  offices = []
+  begin
+    offices = Equipment.where.not(location: [nil, '']).pluck(:location).map { |l| l.to_s.strip }.uniq.sort
+  rescue => _e
+    offices = []
+  end
+  { offices: offices }.to_json
+end
+
+# API: equipments and assigned units for a given office slug
+get '/api/deploy/office/:slug/equipments' do
+  content_type :json
+  slug = params[:slug].to_s.strip.downcase
+  begin
+    eqs = Equipment.where("LOWER(location) = ?", slug).order(:name).limit(500)
+    if eqs.empty?
+      eqs = Equipment.where("LOWER(location) LIKE ?", "%#{slug}%").order(:name).limit(500)
+    end
+    equipments = eqs.map do |eq|
+      {
+        id: eq.id,
+        name: eq.name,
+        model: eq.model,
+        serial_number: eq.serial_number,
+        location: eq.location
+      }
+    end
+  rescue => _e
+    equipments = []
+  end
+
+  begin
+    assigned = UserEquipment.joins(:equipment, :user).where(active: true).where("LOWER(equipments.location) LIKE ?", "%#{slug}%").select('user_equipments.*, equipments.name as equipment_name, users.username as assigned_username')
+    assigned_units = assigned.map do |ue|
+      {
+        id: ue.id,
+        equipment_id: ue.equipment_id,
+        equipment_name: ue.equipment_name,
+        serial: ue.serial,
+        assigned_username: ue.assigned_username,
+        assigned_at: ue.assigned_at
+      }
+    end
+  rescue => _e
+    assigned_units = []
+  end
+
+  { equipments: equipments, assigned_units: assigned_units }.to_json
+end
+
 post '/requests' do
   rq = Request.new(
     equipment_id: params.dig('request','equipment_id'),
