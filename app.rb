@@ -1037,9 +1037,15 @@ post '/users' do
     @error = 'Invalid input. Please fill all fields correctly.'
     erb :'users/new'
   else
-    # mark newly created users to require password change on first login and store temp password
-    u = User.create!(username: username, password: password, role: role, must_change_password: true, temporary_password: password)
-    redirect '/users'
+    # If a user with this username already exists, do not create a duplicate account
+    if User.exists?(username: username)
+      @error = "User '#{username}' already exists. No new account created."
+      erb :'users/new'
+    else
+      # mark newly created users to require password change on first login and store temp password
+      u = User.create!(username: username, password: password, role: role, must_change_password: true, temporary_password: password)
+      redirect '/users'
+    end
   end
 end
 
@@ -2359,25 +2365,39 @@ post '/deploy' do
       base_username = assignee.strip.downcase.gsub(/[^0-9a-z]/i, '.')
       base_username = base_username.gsub(/\.{2,}/, '.').gsub(/^\.|\.$/, '')
       candidate = base_username
-      suffix = 0
-      while candidate.nil? || candidate.strip.empty? || User.exists?(username: candidate)
-        suffix += 1
-        candidate = "#{base_username}#{suffix}"
-        # avoid infinite loop: if base_username empty, use 'user'
-        if suffix > 1000
-          candidate = "user#{Time.now.to_i}"
-          break
-        end
+      # Attempt to reuse any existing username that matches the base_username pattern
+      begin
+        # Find potential matches that start with the base username (e.g., base, base1, base2)
+        matches = User.where("LOWER(username) LIKE ?", "#{base_username}%").pluck(:username)
+        existing_match = matches.find { |u_name| u_name.to_s.downcase =~ /^#{Regexp.escape(base_username)}(?:\d+)?$/ }
+      rescue => _e
+        existing_match = nil
       end
-      # If the candidate username doesn't exist, create the user and set a one-time temp password
-      if !User.exists?(username: candidate)
-        temp_pw = SecureRandom.urlsafe_base64(8).gsub(/[^0-9A-Za-z]/, '')[0,12]
-        new_u = User.create!(username: candidate, password: temp_pw, role: 'normal', must_change_password: true, temporary_password: temp_pw)
-        # store one-time temp password info in session so the admin can copy it from the next page
-        session[:temp_password_for_user] = { 'id' => new_u.id, 'username' => new_u.username, 'password' => temp_pw }
-        begin
-          Activity.create!(trackable: new_u, action: 'user_created_by_deploy', user_name: session[:username] || 'system', changes_made: { generated_username: new_u.username }.to_json)
-        rescue => _e
+
+      if existing_match
+        # reuse existing user; set candidate to existing username and avoid creating a new account
+        candidate = existing_match
+      else
+        suffix = 0
+        while candidate.nil? || candidate.strip.empty? || User.exists?(username: candidate)
+          suffix += 1
+          candidate = "#{base_username}#{suffix}"
+          # avoid infinite loop: if base_username empty, use 'user'
+          if suffix > 1000
+            candidate = "user#{Time.now.to_i}"
+            break
+          end
+        end
+        # If the candidate username doesn't exist, create the user and set a one-time temp password
+        if !User.exists?(username: candidate)
+          temp_pw = SecureRandom.urlsafe_base64(8).gsub(/[^0-9A-Za-z]/, '')[0,12]
+          new_u = User.create!(username: candidate, password: temp_pw, role: 'normal', must_change_password: true, temporary_password: temp_pw)
+          # store one-time temp password info in session so the admin can copy it from the next page
+          session[:temp_password_for_user] = { 'id' => new_u.id, 'username' => new_u.username, 'password' => temp_pw }
+          begin
+            Activity.create!(trackable: new_u, action: 'user_created_by_deploy', user_name: session[:username] || 'system', changes_made: { generated_username: new_u.username }.to_json)
+          rescue => _e
+          end
         end
       end
     end
