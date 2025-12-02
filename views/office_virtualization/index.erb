@@ -1,0 +1,45 @@
+<style>
+  .ov-wrap { padding:16px }
+  .ov-header { display:flex; gap:12px; align-items:center }
+  .ov-canvas { width:100%; height:calc(100vh - 200px); background:#e9e9e9; border-radius:8px; border:1px solid rgba(0,0,0,0.06); display:flex; align-items:center; justify-content:center }
+  .ov-placeholder { color:var(--muted) }
+</style>
+
+<div class="ov-wrap">
+  <div class="ov-header">
+    <h2>Office Virtualization (New)</h2>
+    <div style="margin-left:auto">This area is isolated from Deploy & other functions.</div>
+  </div>
+
+  <div style="margin-top:12px">
+    <label for="ov_office_select"><strong>Select office:</strong></label>
+    <select id="ov_office_select" style="margin-left:8px;padding:8px;border-radius:6px;border:1px solid #ccc">
+      <option value="">-- choose an office --</option>
+    </select>
+    <button id="ov_refresh" class="btn-secondary" style="margin-left:8px">Refresh</button>
+  </div>
+
+  <div id="ov_canvas" class="ov-canvas" style="margin-top:12px">
+    <div class="ov-placeholder">Office virtualization canvas placeholder — implement new features here.</div>
+  </div>
+
+  <div style="margin-top:12px;color:var(--muted)">Notes: This is a scaffold for new office virtualization features. It reads/writes to a separate YAML under `tmp/office_virtualization_maps.yml` and does not modify any existing deploy behavior.</div>
+</div>
+
+<script>
+  (function(){
+    var sel = document.getElementById('ov_office_select');
+    var refresh = document.getElementById('ov_refresh');
+
+    function loadOffices(){
+      // populate by probing existing equipments locations (server-side helper may be added later)
+      fetch('/api/deploy/offices').then(function(r){ return r.json(); }).then(function(d){
+        sel.innerHTML = '<option value="">-- choose an office --</option>';
+        (d.offices || []).forEach(function(o){ var opt = document.createElement('option'); opt.value = o; opt.innerText = o; sel.appendChild(opt); });
+      }).catch(function(){ console.debug('Failed to load offices for OV scaffold'); });
+    }
+
+    refresh.addEventListener('click', loadOffices);
+    loadOffices();
+  })();
+</script>

@@ -170,6 +170,64 @@
   });
 </script>
 
+  <script>
+    // Barcode scanner (keyboard-emulating) listener: capture rapid keyboard input and on Enter lookup serial
+    (function(){
+      var buffer = '';
+      var lastTime = 0;
+      var maxInterCharMs = 150; // typical scanner sends chars quickly
+
+      function showToast(msg){ var t=document.getElementById('toast'); if(t){ t.innerText=msg; t.style.display='block'; setTimeout(function(){ t.style.display='none'; }, 1400); } }
+
+      window.addEventListener('keydown', function(e){
+        var now = Date.now();
+        // if focus is on an input/textarea/contentEditable, don't intercept (allow manual typing)
+        var ae = document.activeElement;
+        var inInput = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+        if(inInput) return;
+
+        if(e.key === 'Enter'){
+          if(buffer && buffer.length > 0){
+            var serial = buffer.trim();
+            buffer = '';
+            // lookup serial via API
+            fetch('/api/equipment/serial/' + encodeURIComponent(serial)).then(function(r){
+              if(!r.ok) throw r;
+              return r.json();
+            }).then(function(d){
+              if(d && d.equipment){
+                var equipSelect = document.getElementById('deploy_equipment');
+                var found = Array.from(equipSelect.options).find(function(o){ return o.value == d.equipment.id; });
+                if(found){
+                  equipSelect.value = found.value;
+                  equipSelect.dispatchEvent(new Event('change'));
+                } else {
+                  // add option dynamically if it's not present
+                  try{
+                    var opt = document.createElement('option');
+                    opt.value = d.equipment.id; opt.text = (d.equipment.name || 'Unknown') + ' (' + (d.equipment.model||'') + ')';
+                    opt.setAttribute('data-category', d.equipment.category || '');
+                    equipSelect.appendChild(opt);
+                    equipSelect.value = opt.value; equipSelect.dispatchEvent(new Event('change'));
+                  }catch(e){/* ignore */}
+                }
+                var serialInput = document.getElementById('serial_single'); if(serialInput) serialInput.value = serial;
+                showToast('Scanned: ' + serial);
+              } else {
+                showToast('No equipment found for ' + serial);
+              }
+            }).catch(function(){ showToast('Lookup failed'); });
+          }
+        } else if(e.key && e.key.length === 1){
+          // record only printable characters
+          if(now - lastTime > maxInterCharMs) buffer = '';
+          buffer += e.key;
+          lastTime = now;
+        }
+      });
+    })();
+  </script>
+
 <!-- Scanner modal and scripts -->
 <div id="scannerModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:3000; align-items:center; justify-content:center">
   <div style="width:100%; max-width:720px; background:var(--card); padding:12px; border-radius:10px; box-sizing:border-box; color:#eaf6ff;">

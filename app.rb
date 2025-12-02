@@ -57,8 +57,26 @@ set :session_secret, secret
 LEGACY_CONFIG_PATH = File.join(Dir.pwd, 'tmp', 'legacy_migration.yml')
 LEGACY_EXPORT_DIR = File.join(Dir.pwd, 'tmp', 'db_exports')
 FileUtils.mkdir_p(LEGACY_EXPORT_DIR) unless Dir.exist?(LEGACY_EXPORT_DIR)
-# Office virtualization storage removed. New features will provide
-# their own storage/handlers.
+# Office Virtualization: isolated storage for the new implementation.
+# We keep this separate from any previous 'office_maps' helpers so
+# existing functionality is not affected.
+OFFICE_VIRTUALIZATION_MAPS_PATH = File.join(Dir.pwd, 'tmp', 'office_virtualization_maps.yml')
+FileUtils.mkdir_p(File.dirname(OFFICE_VIRTUALIZATION_MAPS_PATH)) unless Dir.exist?(File.dirname(OFFICE_VIRTUALIZATION_MAPS_PATH))
+
+def read_office_virtualization_maps
+  if File.exist?(OFFICE_VIRTUALIZATION_MAPS_PATH)
+    YAML.load_file(OFFICE_VIRTUALIZATION_MAPS_PATH) || {}
+  else
+    {}
+  end
+rescue => _e
+  {}
+end
+
+def write_office_virtualization_maps(hash)
+  FileUtils.mkdir_p(File.dirname(OFFICE_VIRTUALIZATION_MAPS_PATH))
+  File.write(OFFICE_VIRTUALIZATION_MAPS_PATH, hash.to_yaml)
+end
 
 def read_legacy_config
   if File.exist?(LEGACY_CONFIG_PATH)
@@ -2281,6 +2299,72 @@ get '/deploy' do
   @categories = Equipment.group(:category).having('SUM(COALESCE(quantity,0)) > 0').pluck(:category).compact
   @equipments = Equipment.order(:name)
   erb :'deploy/new'
+end
+
+# API: lookup equipment (or deployed unit) by serial number for scanner support
+get '/api/equipment/serial/:serial' do
+  content_type :json
+  s = params[:serial].to_s.strip
+  begin
+    # Try exact match on equipments.serial_number
+    eq = Equipment.find_by(serial_number: s)
+    if eq.nil?
+      # try case-insensitive
+      eq = Equipment.where('LOWER(serial_number) = ?', s.downcase).first
+    end
+    # fallback: try to find a user_equipment with that serial
+    ue = nil
+    if eq.nil?
+      ue = UserEquipment.find_by(serial: s)
+      if ue.nil?
+        ue = UserEquipment.where('LOWER(serial) = ?', s.downcase).first
+      end
+      eq = ue&.equipment
+    end
+    if eq
+      { equipment: { id: eq.id, name: eq.name, model: eq.model, serial_number: eq.serial_number, category: eq.category, quantity: eq.quantity } , user_equipment: (ue ? { id: ue.id, serial: ue.serial, assigned_to: ue.user&.username } : nil) }.to_json
+    else
+      status 404
+      { error: 'not found' }.to_json
+    end
+  rescue => e
+    status 500
+    { error: e.message }.to_json
+  end
+end
+
+# Office Virtualization scaffold routes (isolated)
+get '/office_virtualization' do
+  require_at_least_semi! if defined?(require_at_least_semi!)
+  erb :'office_virtualization/index'
+end
+
+# Optional API: load virtualization map for an office (uses isolated storage)
+get '/api/office_virtualization/:slug/map' do
+  content_type :json
+  slug = params[:slug].to_s
+  maps = read_office_virtualization_maps
+  map = maps[slug] || { 'icons' => [] }
+  map.to_json
+end
+
+# Optional API: save virtualization map for an office
+post '/api/office_virtualization/:slug/map' do
+  require_at_least_semi! if defined?(require_at_least_semi!)
+  slug = params[:slug].to_s
+  begin
+    payload = request.body.read
+    data = JSON.parse(payload) rescue nil
+    halt 400, { error: 'invalid json' }.to_json unless data.is_a?(Hash)
+    maps = read_office_virtualization_maps
+    maps[slug] = data
+    write_office_virtualization_maps(maps)
+    status 200
+    { ok: true }.to_json
+  rescue => e
+    status 500
+    { error: e.message }.to_json
+  end
 end
 
 post '/deploy' do
