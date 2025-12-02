@@ -19,8 +19,8 @@
     <button id="ov_refresh" class="btn-secondary" style="margin-left:8px">Refresh</button>
   </div>
 
-  <div id="ov_canvas" class="ov-canvas" style="margin-top:12px">
-    <div class="ov-placeholder">Office virtualization canvas placeholder — implement new features here.</div>
+  <div id="ov_canvas" class="ov-canvas" style="margin-top:12px;align-items:flex-start;overflow:auto;padding:12px;gap:12px;display:flex;flex-wrap:wrap">
+    <!-- cards will be injected here -->
   </div>
 
   <div style="margin-top:12px;color:var(--muted)">Notes: This is a scaffold for new office virtualization features. It reads/writes to a separate YAML under `tmp/office_virtualization_maps.yml` and does not modify any existing deploy behavior.</div>
@@ -32,12 +32,47 @@
     var refresh = document.getElementById('ov_refresh');
 
     function loadOffices(){
-      // populate by probing existing equipments locations (server-side helper may be added later)
       fetch('/api/deploy/offices').then(function(r){ return r.json(); }).then(function(d){
         sel.innerHTML = '<option value="">-- choose an office --</option>';
         (d.offices || []).forEach(function(o){ var opt = document.createElement('option'); opt.value = o; opt.innerText = o; sel.appendChild(opt); });
       }).catch(function(){ console.debug('Failed to load offices for OV scaffold'); });
     }
+
+    function renderCardsForOffice(slug){
+      var canvas = document.getElementById('ov_canvas');
+      canvas.innerHTML = '';
+      if(!slug || slug.trim()==='') return;
+      fetch('/api/office_virtualization/' + encodeURIComponent(slug) + '/equipments').then(function(r){ return r.json(); }).then(function(d){
+        var eqs = d.equipments || [];
+        var assigned = d.assigned_units || [];
+        if(eqs.length===0 && assigned.length===0){
+          var msg = document.createElement('div'); msg.className='ov-placeholder'; msg.innerText='No deployments found for this office.'; canvas.appendChild(msg); return;
+        }
+
+        // First, render assigned units as cards (they represent per-unit deployments)
+        assigned.forEach(function(u){
+          var c = document.createElement('div'); c.className='ov-card'; c.style.width='320px'; c.style.background='#fff'; c.style.padding='12px'; c.style.borderRadius='8px'; c.style.boxShadow='0 8px 20px rgba(0,0,0,0.08)';
+          var title = document.createElement('div'); title.style.fontWeight='700'; title.style.marginBottom='6px'; title.innerText = (u.equipment_name || 'Equipment');
+          var body = document.createElement('div'); body.style.fontSize='13px'; body.style.color='var(--muted)';
+          body.innerHTML = '<div>Serial: ' + (u.serial || '—') + '</div>' + '<div>Assigned to: ' + (u.assigned_username || '—') + '</div>' + '<div>Assigned at: ' + (u.assigned_at || '—') + '</div>';
+          c.appendChild(title); c.appendChild(body); canvas.appendChild(c);
+        });
+
+        // Then show equipments (these represent inventory-level items)
+        eqs.forEach(function(eq){
+          var c = document.createElement('div'); c.className='ov-card'; c.style.width='320px'; c.style.background='#fff'; c.style.padding='12px'; c.style.borderRadius='8px'; c.style.boxShadow='0 8px 20px rgba(0,0,0,0.08)';
+          var title = document.createElement('div'); title.style.fontWeight='700'; title.style.marginBottom='6px'; title.innerText = (eq.name || 'Unknown');
+          var body = document.createElement('div'); body.style.fontSize='13px'; body.style.color='var(--muted)';
+          body.innerHTML = '<div>Model: ' + (eq.model || '—') + '</div>' + '<div>Serial: ' + (eq.serial_number || '—') + '</div>' + '<div>Quantity: ' + (eq.quantity || 0) + '</div>' + '<div>Purchase date: ' + (eq.purchase_date || '—') + '</div>';
+          c.appendChild(title); c.appendChild(body); canvas.appendChild(c);
+        });
+
+      }).catch(function(){
+        var err = document.createElement('div'); err.className='ov-placeholder'; err.innerText='Failed to load deployments for ' + slug; canvas.appendChild(err);
+      });
+    }
+
+    sel.addEventListener('change', function(e){ renderCardsForOffice(e.target.value); });
 
     refresh.addEventListener('click', loadOffices);
     loadOffices();

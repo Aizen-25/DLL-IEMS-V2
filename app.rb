@@ -2367,6 +2367,50 @@ post '/api/office_virtualization/:slug/map' do
   end
 end
 
+# API: return equipments and assigned units for an office (used by office virtualization UI)
+get '/api/office_virtualization/:slug/equipments' do
+  content_type :json
+  slug = params[:slug].to_s.strip
+  begin
+    eqs = Equipment.where("LOWER(location) = ?", slug.downcase).order(:name).limit(1000)
+    if eqs.empty?
+      eqs = Equipment.where("LOWER(location) LIKE ?", "%#{slug.downcase}%").order(:name).limit(1000)
+    end
+    equipments = eqs.map do |eq|
+      {
+        id: eq.id,
+        name: eq.name,
+        model: eq.model,
+        serial_number: eq.serial_number,
+        location: eq.location,
+        quantity: eq.quantity,
+        purchase_date: (eq.purchase_date ? eq.purchase_date.to_s : nil)
+      }
+    end
+  rescue => _e
+    equipments = []
+  end
+
+  begin
+    assigned = UserEquipment.joins(:equipment, :user).where(active: true).where("LOWER(equipments.location) LIKE ?", "%#{slug.downcase}%")
+      .select('user_equipments.*, equipments.name as equipment_name, users.username as assigned_username')
+    assigned_units = assigned.map do |ue|
+      {
+        id: ue.id,
+        equipment_id: ue.equipment_id,
+        equipment_name: ue.equipment_name,
+        serial: ue.serial,
+        assigned_username: ue.assigned_username,
+        assigned_at: (ue.assigned_at ? ue.assigned_at.to_s : nil)
+      }
+    end
+  rescue => _e
+    assigned_units = []
+  end
+
+  { equipments: equipments, assigned_units: assigned_units }.to_json
+end
+
 post '/deploy' do
   require_at_least_semi!
   cat = params['category']
